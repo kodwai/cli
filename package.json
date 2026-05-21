@@ -1,0 +1,42 @@
+{
+  "name": "@kodwai/cli",
+  "version": "1.4.0",
+  "description": "Kodwai CLI — AI-agent coding challenges and interview sessions",
+  "type": "module",
+  "bin": {
+    "kodwai": "dist/bin/kodwai.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "kodwai",
+    "coding-challenge",
+    "developer",
+    "ai-agent",
+    "interview",
+    "hiring"
+  ],
+  "license": "UNLICENSED",
+  "private": false,
+  "dependencies": {
+    "chalk": "^5.4.0",
+    "cross-spawn": "^7.0.6",
+    "diff": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
+    "@types/diff": "^7.0.0",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
