@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { AgentTrace, TraceTurn } from "./types.js";
 import { rateTraceQuality } from "./quality.js";
+import { encodeProjectPath } from "./path-encode.js";
 
 /**
  * Collect Claude Code traces scoped to a specific workspace.
@@ -22,7 +23,9 @@ export async function collectClaudeCodeTrace(
   const claudeProjectsDir = join(homedir(), ".claude", "projects");
 
   // Encode workspace path to match Claude Code's directory naming
-  const encodedPath = workspacePath.replace(/\//g, "-");
+  // Uses encodeProjectPath so that Windows paths (backslashes, drive colon) are
+  // handled correctly in addition to the POSIX forward-slash case.
+  const encodedPath = encodeProjectPath(workspacePath);
 
   // Find matching project directories (exact match or subdirectory match)
   let projectDirs: string[] = [];
