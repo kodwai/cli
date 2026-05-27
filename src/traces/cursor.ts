@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { homedir, platform } from "node:os";
 import { execSync } from "node:child_process";
 import type { AgentTrace, TraceTurn } from "./types.js";
+import { rateTraceQuality } from "./quality.js";
 
 /**
  * Collect Cursor traces for a specific workspace.
@@ -57,7 +58,7 @@ export async function collectCursorTrace(
   return {
     agent: "cursor",
     turns,
-    trace_quality: turns.filter((t) => t.role === "user").length > 0 ? "full" : "partial",
+    trace_quality: rateTraceQuality(turns),
   };
 }
 

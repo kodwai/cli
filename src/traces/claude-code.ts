@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { AgentTrace, TraceTurn } from "./types.js";
+import { rateTraceQuality } from "./quality.js";
 
 /**
  * Collect Claude Code traces scoped to a specific workspace.
@@ -123,7 +124,7 @@ export async function collectClaudeCodeTrace(
   return {
     agent: "claude-code",
     turns,
-    trace_quality: turns.length > 5 ? "full" : "partial",
+    trace_quality: rateTraceQuality(turns),
   };
 }
 
