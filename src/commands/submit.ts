@@ -64,16 +64,39 @@ export async function submitChallenge(): Promise<void> {
   display.success(`${codeSnapshot.length} files collected`);
 
   // 3. Collect git data
+  //
+  // Note: POSIX shell redirections (2>/dev/null) and || are not available on
+  // Windows (cmd.exe). We use try/catch in JS instead so this works cross-platform.
   let gitDiff: string | null = null;
   let gitLog: any[] = [];
   try {
-    gitDiff = execSync("git diff HEAD~100..HEAD 2>/dev/null || git diff", {
-      cwd: meta.workspace_path, encoding: "utf-8", maxBuffer: 5_000_000,
-    }).slice(0, 500_000);
+    try {
+      gitDiff = execSync("git diff HEAD~100..HEAD", {
+        cwd: meta.workspace_path,
+        encoding: "utf-8",
+        maxBuffer: 5_000_000,
+        stdio: ["pipe", "pipe", "pipe"],
+      }).slice(0, 500_000);
+    } catch {
+      try {
+        gitDiff = execSync("git diff", {
+          cwd: meta.workspace_path,
+          encoding: "utf-8",
+          maxBuffer: 5_000_000,
+          stdio: ["pipe", "pipe", "pipe"],
+        }).slice(0, 500_000);
+      } catch {
+        gitDiff = null;
+      }
+    }
 
     const logOutput = execSync(
-      'git log --format=\'{"hash":"%H","message":"%s","timestamp":"%aI"}\' 2>/dev/null',
-      { cwd: meta.workspace_path, encoding: "utf-8" },
+      'git log --format=\'{"hash":"%H","message":"%s","timestamp":"%aI"}\'',
+      {
+        cwd: meta.workspace_path,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      },
     );
     gitLog = logOutput.trim().split("\n").filter(Boolean).map((l) => {
       try { return JSON.parse(l); } catch { return null; }

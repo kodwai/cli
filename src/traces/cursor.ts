@@ -77,10 +77,16 @@ async function findComposerIds(cursorBase: string, targetPath: string): Promise<
 
       try {
         const wsJson = JSON.parse(await readFile(wsJsonPath, "utf-8"));
-        const folder = decodeURIComponent(wsJson.folder || "").replace("file://", "");
+        // Strip the file:// scheme (on Windows Cursor uses file:///C:/... so stripping
+        // "file://" leaves "/C:/..." — we normalise separators on both sides so the
+        // startsWith comparison works on Windows too).
+        const folderRaw = decodeURIComponent(wsJson.folder || "").replace("file://", "");
+        // Normalise both sides to forward-slashes for a consistent comparison.
+        const folder = folderRaw.replace(/\\/g, "/");
+        const normalTarget = targetPath.replace(/\\/g, "/");
 
         // Match if the workspace folder is our target or a parent of it
-        if (targetPath.startsWith(folder) || folder.startsWith(targetPath)) {
+        if (normalTarget.startsWith(folder) || folder.startsWith(normalTarget)) {
           // Read composer IDs from this workspace's state.vscdb
           const dbPath = join(wsStorage, dir.name, "state.vscdb");
           const ids = await getComposerIdsFromDb(dbPath);
