@@ -1,9 +1,11 @@
+import { fileURLToPath } from "node:url";
 import { startSession } from "../commands/start.js";
 import { startChallenge } from "../commands/challenge.js";
 import { submitChallenge } from "../commands/submit.js";
 import { login } from "../commands/login.js";
 import { logout } from "../commands/logout.js";
 import { whoami } from "../commands/whoami.js";
+import { notifyIfOutdated, maybeScheduleCheck, runUpdateCheck } from "../utils/update-notifier.js";
 
 // Some terminals/keyboards autocorrect "--" into an em/en dash, so a flag like
 // "--local" arrives as "—local" or "—-local". Normalize a leading run of dashes
@@ -38,25 +40,7 @@ const fail = (err: Error) => {
   process.exit(1);
 };
 
-if (command === "login") {
-  // Browser-based sign in (also used to switch accounts)
-  login(apiUrlFlag(), getFlag("--web-url")).catch(fail);
-} else if (command === "logout") {
-  // Sign out (clear stored token)
-  logout().catch(fail);
-} else if (command === "whoami") {
-  // Show the currently signed-in account
-  whoami(apiUrlFlag()).catch(fail);
-} else if (command === "start" && args[1]) {
-  // Interview session mode (candidate joins via invite)
-  startSession(args[1], apiUrlFlag(), getFlag("--token")).catch(fail);
-} else if (command === "challenge" && args[1]) {
-  // Developer challenge mode
-  startChallenge(args[1], apiUrlFlag()).catch(fail);
-} else if (command === "submit") {
-  // Submit local challenge
-  submitChallenge().catch(fail);
-} else {
+function printHelp() {
   console.log(`
   kodwai — AI-agent coding challenges & interview sessions
 
@@ -75,5 +59,37 @@ if (command === "login") {
     --web-url <url>                  Override web app URL (browser sign in)
     --token <token>                  Session token (interview mode)
   `);
-  process.exit(command ? 1 : 0);
 }
+
+async function main() {
+  // Hidden entrypoint: the background update check (spawned detached). Must run
+  // before the notifier wiring so it never recurses.
+  if (command === "__update-check") {
+    await runUpdateCheck();
+    return;
+  }
+
+  // Show a cached "update available" notice (instant), and refresh the cache in
+  // a detached background process. Both are best-effort and never block.
+  await notifyIfOutdated();
+  void maybeScheduleCheck(fileURLToPath(import.meta.url));
+
+  if (command === "login") {
+    await login(apiUrlFlag(), getFlag("--web-url"));
+  } else if (command === "logout") {
+    await logout();
+  } else if (command === "whoami") {
+    await whoami(apiUrlFlag());
+  } else if (command === "start" && args[1]) {
+    await startSession(args[1], apiUrlFlag(), getFlag("--token"));
+  } else if (command === "challenge" && args[1]) {
+    await startChallenge(args[1], apiUrlFlag());
+  } else if (command === "submit") {
+    await submitChallenge();
+  } else {
+    printHelp();
+    process.exit(command ? 1 : 0);
+  }
+}
+
+main().catch(fail);
