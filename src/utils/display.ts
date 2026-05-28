@@ -5,11 +5,18 @@ const muted = chalk.hex("#9a948a");
 
 export const display = {
   banner() {
+    // ASCII wordmark generated with figlet's "slant" font (pre-rendered so the
+    // CLI carries no runtime dependency). Run `figlet -f slant kodwai` to regen.
+    const lines = [
+      "      __             __               _",
+      "     / /______  ____/ /      ______ _(_)",
+      "    / //_/ __ \\/ __  / | /| / / __ `/ /",
+      "   / ,< / /_/ / /_/ /| |/ |/ / /_/ / /",
+      "  /_/|_|\\____/\\__,_/ |__/|__/\\__,_/_/",
+    ];
     console.log("");
-    console.log(rust.bold("  ╷ ╷        ╷           ╷"));
-    console.log(rust.bold("  ├─┤  ╶─╴ ╶─┤ ╷╷╷ ╶─╴  │"));
-    console.log(rust.bold("  ╵ ╵  ╶─╴ ╶─╵ ╶╶╶ ╶─╴  ╵"));
-    console.log(muted("  kodwai — ai-agent coding platform"));
+    for (const line of lines) console.log(rust.bold(line));
+    console.log(muted("  ai-agent coding platform"));
     console.log("");
   },
 

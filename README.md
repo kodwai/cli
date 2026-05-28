@@ -8,6 +8,28 @@ kodwai is a platform where developers solve real-world coding challenges using A
 
 ## Getting Started
 
+### Sign in
+
+```bash
+kodwai login
+```
+
+This opens your browser, you approve the sign-in on kodwai, and the CLI stores a
+token in `~/.kodwai/config.json`. It's the standard browser (OAuth loopback) flow:
+the CLI starts a temporary local server, the browser hands back a one-time code,
+and the CLI exchanges it for your token.
+
+```bash
+kodwai whoami     # show the signed-in account
+kodwai logout     # sign out of this device
+```
+
+To **switch accounts**, run `kodwai login` again (or `kodwai logout` first) and
+choose "Use a different account" in the browser.
+
+You don't have to log in first: `challenge` and `submit` will trigger the same
+browser sign-in automatically if you're not signed in.
+
 ### Start a challenge
 
 ```bash
@@ -15,7 +37,7 @@ npx @kodwai/cli challenge <slug>
 ```
 
 This will:
-1. Log you in (or use your stored token)
+1. Sign you in via the browser if needed (or use your stored token)
 2. Ask which AI agent you'll use (Claude Code, Cursor, etc.)
 3. Create a workspace with the problem statement and starter files
 4. Start the timer
@@ -52,13 +74,32 @@ When time runs out or you type `/exit` in Claude Code, your session is auto-uplo
 ### Commands
 
 ```
+kodwai login                     Sign in via your browser
+kodwai logout                    Sign out of this device
+kodwai whoami                    Show the signed-in account
 kodwai challenge <id-or-slug>    Start a developer coding challenge
 kodwai submit                    Submit your challenge solution
 kodwai start <session-id>        Join an interview session
 
 Options:
+  --local                        Use local dev (API localhost:8000, web localhost:3000)
   --api-url <url>                Override API URL
+  --web-url <url>                Override web app URL (browser sign in)
   --token <token>                Session token (interview mode)
+```
+
+### Local development
+
+By default the CLI talks to production. To target a local stack, use `--local`
+(or set `KODWAI_API_URL`). The browser sign-in URL follows the API host, so a
+local API opens `http://localhost:3000`:
+
+```bash
+kodwai login --local
+# equivalent:
+kodwai login --api-url http://localhost:8000
+# or, to apply to every command in the shell:
+export KODWAI_API_URL=http://localhost:8000
 ```
 
 ## Requirements
