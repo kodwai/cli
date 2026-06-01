@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { display } from "../utils/display.js";
 import { ensureAuth, promptChoice } from "../utils/auth.js";
+import { ensureCanSubmit } from "../utils/entitlement.js";
 import { ensureConsent } from "../utils/consent.js";
 import { ensureGit } from "../utils/git.js";
 
@@ -24,6 +25,9 @@ export async function startChallenge(idOrSlug: string, apiUrl?: string): Promise
   // 1. Authenticate
   const token = await ensureAuth(baseUrl);
 
+  // 1b. Make sure they can still submit before they invest time coding.
+  if (!(await ensureCanSubmit(baseUrl))) return;
+
   // 2. Start submission via API
   display.info("Loading challenge...");
   const resp = await fetch(`${baseUrl}/api/challenges/${idOrSlug}/start`, {
@@ -36,6 +40,13 @@ export async function startChallenge(idOrSlug: string, apiUrl?: string): Promise
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: "Failed to start challenge" }));
+    // 409 = a challenge is already in progress (one at a time). Show it cleanly, don't crash.
+    if (resp.status === 409) {
+      console.log("");
+      display.warning(err.detail || "You already have a challenge in progress.");
+      console.log("");
+      return;
+    }
     throw new Error(err.detail || "Failed to start challenge");
   }
 

@@ -3,7 +3,8 @@ import { join, relative } from "node:path";
 import { execSync } from "node:child_process";
 import { createInterface } from "node:readline";
 import { display } from "../utils/display.js";
-import { getStoredToken } from "../utils/auth.js";
+import { getStoredToken, getCurrentUser } from "../utils/auth.js";
+import { ensureCanSubmit } from "../utils/entitlement.js";
 import { detectAndCollectTrace, type AgentChoice } from "../traces/detector.js";
 
 // Directories and files to skip when collecting code snapshot
@@ -43,6 +44,10 @@ export async function submitChallenge(): Promise<void> {
   if (!meta) {
     throw new Error("No active challenge found. Run 'kodwai challenge <id>' first, then cd into the workspace.");
   }
+
+  // Block early if the developer is out of free submissions (the API enforces
+  // this too, but checking first avoids collecting and uploading for nothing).
+  if (!(await ensureCanSubmit(meta.api_url))) return;
 
   const startTime = new Date(meta.started_at);
   const elapsedMs = Date.now() - startTime.getTime();
@@ -219,19 +224,21 @@ export async function submitChallenge(): Promise<void> {
   display.info(`  View results: ${clientUrl}/dev/submissions/${meta.submission_id}`);
   display.info("");
 
-  // Check if user has API key
+  // Free-tier status after submitting (best-effort).
   try {
-    const keysResp = await fetch(`${meta.api_url}/api/api-keys`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (keysResp.ok) {
-      const keys = await keysResp.json();
-      if (keys.length === 0) {
-        display.warning("Add your Anthropic API key at kodwai.com/dev/settings for full AI-powered scoring.");
+    const me = await getCurrentUser(meta.api_url);
+    if (me && me.user_type === "developer" && !me.has_claude_api_key && (me.free_submissions_limit ?? 0) > 0) {
+      const left = me.free_submissions_remaining ?? 0;
+      if (left > 0) {
+        display.info(`  ${left} free submission${left !== 1 ? "s" : ""} left. Add your Anthropic key for unlimited: ${clientUrl}/dev/settings`);
+      } else {
+        display.warning("That was your last free submission.");
+        display.info(`  Connect your Anthropic API key to keep going: ${clientUrl}/dev/settings`);
       }
+      display.info("");
     }
   } catch {
-    // Ignore
+    // Ignore — status display is best-effort.
   }
 }
 

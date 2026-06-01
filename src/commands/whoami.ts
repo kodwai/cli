@@ -16,5 +16,8 @@ export async function whoami(apiUrl?: string): Promise<void> {
   }
   const handle = user.username ? ` (@${user.username})` : "";
   display.info(`  Signed in as ${user.name} <${user.email}>${handle}`);
+  if (user.user_type === "developer" && !user.has_claude_api_key && (user.free_submissions_limit ?? 0) > 0) {
+    display.info(`  ${user.free_submissions_remaining ?? 0} of ${user.free_submissions_limit} free submissions left`);
+  }
   console.log("");
 }

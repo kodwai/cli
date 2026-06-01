@@ -45,6 +45,12 @@ export interface AuthUser {
   email: string;
   username?: string;
   user_type?: string;
+  // Free-submission entitlement (present on /auth/me responses).
+  has_claude_api_key?: boolean;
+  can_submit?: boolean;
+  free_submissions_used?: number;
+  free_submissions_limit?: number;
+  free_submissions_remaining?: number;
 }
 
 async function readConfig(): Promise<StoredConfig> {
