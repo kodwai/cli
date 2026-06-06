@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import type { AgentTrace, TraceTurn } from "./types.js";
 import { rateTraceQuality } from "./quality.js";
+import { pickPrimaryModel } from "./model.js";
 
 export interface ParsedRollout {
   cwd: string | null;
@@ -12,6 +13,8 @@ export interface ParsedRollout {
   threadSource: string | null;
   turns: TraceTurn[];
   tokenUsage?: { input: number; output: number };
+  modelRaw: string | null;
+  modelProvider: string | null;
 }
 
 /**
@@ -39,6 +42,8 @@ export function parseCodexRollout(content: string): ParsedRollout {
   let originator: string | null = null;
   let threadSource: string | null = null;
   let tokenUsage: { input: number; output: number } | undefined;
+  const models: string[] = [];
+  let modelProvider: string | null = null;
   // call_id -> tool_call object, so a later function_call_output can fill output.
   const toolCallsById = new Map<string, { name: string; input: string; output: string }>();
 
@@ -58,6 +63,12 @@ export function parseCodexRollout(content: string): ParsedRollout {
       if (typeof payload.cwd === "string") cwd = payload.cwd;
       if (typeof payload.originator === "string") originator = payload.originator;
       if (typeof payload.thread_source === "string") threadSource = payload.thread_source;
+      if (typeof payload.model_provider === "string") modelProvider = payload.model_provider;
+      continue;
+    }
+
+    if (rec.type === "turn_context" && typeof payload.model === "string") {
+      models.push(payload.model);
       continue;
     }
 
@@ -98,7 +109,15 @@ export function parseCodexRollout(content: string): ParsedRollout {
     }
   }
 
-  return { cwd, originator, threadSource, turns, tokenUsage };
+  return {
+    cwd,
+    originator,
+    threadSource,
+    turns,
+    tokenUsage,
+    modelRaw: pickPrimaryModel(models) ?? null,
+    modelProvider,
+  };
 }
 
 function extractText(content: any): string {
@@ -140,6 +159,8 @@ export async function collectCodexTraceFrom(
 
   const turns: TraceTurn[] = [];
   let tokenUsage: { input: number; output: number } | undefined;
+  let modelRaw: string | null = null;
+  let modelProvider: string | null = null;
 
   for (const file of files) {
     let content: string;
@@ -160,6 +181,8 @@ export async function collectCodexTraceFrom(
       turns.push(turn);
     }
     if (parsed.tokenUsage) tokenUsage = parsed.tokenUsage;
+    if (parsed.modelRaw) modelRaw = parsed.modelRaw;
+    if (parsed.modelProvider) modelProvider = parsed.modelProvider;
   }
 
   if (turns.length === 0) return null;
@@ -171,6 +194,8 @@ export async function collectCodexTraceFrom(
     turns,
     ...(tokenUsage ? { token_usage: tokenUsage } : {}),
     trace_quality: rateTraceQuality(turns),
+    ...(modelRaw ? { model_raw: modelRaw } : {}),
+    ...(modelProvider ? { model_provider: modelProvider } : {}),
   };
 }
 

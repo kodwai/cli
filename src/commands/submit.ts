@@ -126,7 +126,8 @@ export async function submitChallenge(): Promise<void> {
   display.info(`Collecting ${meta.agent_choice} traces...`);
   const detection = await detectAndCollectTrace(meta.agent_choice, startTime, meta.workspace_path);
   if (detection.trace) {
-    display.success(`Agent: ${detection.agent} (${detection.trace.trace_quality} quality, ${detection.trace.turns.length} turns)`);
+    const modelSuffix = detection.trace.model_raw ? ` · ${detection.trace.model_raw}` : "";
+    display.success(`Agent: ${detection.agent}${modelSuffix} (${detection.trace.trace_quality} quality, ${detection.trace.turns.length} turns)`);
   } else {
     display.info(`No ${meta.agent_choice} traces found — submitting with code only`);
   }
@@ -196,6 +197,8 @@ export async function submitChallenge(): Promise<void> {
     git_log: gitLog,
     test_results: testResults,
     agent_used: detection.agent,
+    model_raw: detection.trace?.model_raw,
+    model_provider: detection.trace?.model_provider,
     agent_trace: detection.trace,
     time_taken_ms: elapsedMs,
   };
