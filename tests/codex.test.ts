@@ -159,4 +159,62 @@ describe("collectCodexTraceFrom", () => {
     const trace = await collectCodexTraceFrom(join(tmpdir(), "definitely-missing-codex-root"), new Date(), "/x");
     expect(trace).toBeNull();
   });
+
+  it("excludes foreign-agent sessions imported by the Codex Desktop app", async () => {
+    // The Codex desktop app imports other agents' (e.g. Claude Code) sessions
+    // into ~/.codex/sessions with originator "Codex Desktop" and NO thread_source,
+    // re-stamping their timestamps to import time. They keep the original cwd, so
+    // they would otherwise match the workspace and be mislabeled as Codex turns.
+    const root = await mkdtemp(join(tmpdir(), "codex-sessions-"));
+    const ws = "/Users/x/kodwai-demo";
+    const start = new Date("2026-06-06T12:00:00.000Z");
+
+    await writeSession(root, "2026/06/06", "rollout-imported.jsonl", [
+      JSON.stringify({ timestamp: "2026-06-06T12:01:00.000Z", type: "session_meta", payload: { cwd: ws, originator: "Codex Desktop", source: "vscode" } }),
+      JSON.stringify({ timestamp: "2026-06-06T12:02:00.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "imported claude turn" }] } }),
+    ]);
+
+    const trace = await collectCodexTraceFrom(root, start, ws);
+    expect(trace).toBeNull();
+  });
+
+  it("collects genuine Codex Desktop sessions (project folder opened, thread_source user)", async () => {
+    // When the user opens a real project folder in the desktop app, the session
+    // is user-started (thread_source "user") with the real cwd — it must count.
+    const root = await mkdtemp(join(tmpdir(), "codex-sessions-"));
+    const ws = "/Users/x/kodwai-demo";
+    const start = new Date("2026-06-06T12:00:00.000Z");
+
+    await writeSession(root, "2026/06/06", "rollout-desktop.jsonl", [
+      JSON.stringify({ timestamp: "2026-06-06T12:01:00.000Z", type: "session_meta", payload: { cwd: ws, originator: "Codex Desktop", source: "vscode", thread_source: "user" } }),
+      JSON.stringify({ timestamp: "2026-06-06T12:02:00.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "desktop turn" }] } }),
+    ]);
+
+    const trace = await collectCodexTraceFrom(root, start, ws);
+    expect(trace).not.toBeNull();
+    expect(trace!.turns.map((t) => t.content)).toEqual(["desktop turn"]);
+  });
+
+  it("collects genuine CLI and desktop sessions but drops the imported one", async () => {
+    const root = await mkdtemp(join(tmpdir(), "codex-sessions-"));
+    const ws = "/Users/x/kodwai-demo";
+    const start = new Date("2026-06-06T12:00:00.000Z");
+
+    await writeSession(root, "2026/06/06", "rollout-imported.jsonl", [
+      JSON.stringify({ timestamp: "2026-06-06T12:01:00.000Z", type: "session_meta", payload: { cwd: ws, originator: "Codex Desktop", source: "vscode" } }),
+      JSON.stringify({ timestamp: "2026-06-06T12:01:30.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "imported claude turn" }] } }),
+    ]);
+    await writeSession(root, "2026/06/06", "rollout-cli.jsonl", [
+      JSON.stringify({ timestamp: "2026-06-06T12:03:00.000Z", type: "session_meta", payload: { cwd: ws, originator: "codex_exec", source: "exec", thread_source: "user" } }),
+      JSON.stringify({ timestamp: "2026-06-06T12:04:00.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "cli turn" }] } }),
+    ]);
+    await writeSession(root, "2026/06/06", "rollout-desktop.jsonl", [
+      JSON.stringify({ timestamp: "2026-06-06T12:05:00.000Z", type: "session_meta", payload: { cwd: ws, originator: "Codex Desktop", source: "vscode", thread_source: "user" } }),
+      JSON.stringify({ timestamp: "2026-06-06T12:06:00.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "desktop turn" }] } }),
+    ]);
+
+    const trace = await collectCodexTraceFrom(root, start, ws);
+    expect(trace).not.toBeNull();
+    expect(trace!.turns.map((t) => t.content)).toEqual(["cli turn", "desktop turn"]);
+  });
 });

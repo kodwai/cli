@@ -6,8 +6,24 @@ import { rateTraceQuality } from "./quality.js";
 
 export interface ParsedRollout {
   cwd: string | null;
+  /** session_meta.originator — "codex_exec"/"codex" for the CLI, "Codex Desktop" for the app. */
+  originator: string | null;
+  /** session_meta.thread_source — "user" for genuine user-started sessions; absent on imports. */
+  threadSource: string | null;
   turns: TraceTurn[];
   tokenUsage?: { input: number; output: number };
+}
+
+/**
+ * The Codex desktop app imports other agents' sessions (e.g. Claude Code) into
+ * ~/.codex/sessions as rollout files with `originator: "Codex Desktop"` and no
+ * `thread_source`, re-stamping their timestamps to import time. Such a rollout
+ * keeps the original cwd and would otherwise be mislabeled as a Codex trace.
+ * Genuine sessions — CLI (`codex_exec`/`codex`) or a desktop session the user
+ * started in a real folder — carry `thread_source: "user"` and are kept.
+ */
+export function isImportedRollout(parsed: Pick<ParsedRollout, "originator" | "threadSource">): boolean {
+  return parsed.originator === "Codex Desktop" && parsed.threadSource !== "user";
 }
 
 /**
@@ -20,6 +36,8 @@ export interface ParsedRollout {
 export function parseCodexRollout(content: string): ParsedRollout {
   const turns: TraceTurn[] = [];
   let cwd: string | null = null;
+  let originator: string | null = null;
+  let threadSource: string | null = null;
   let tokenUsage: { input: number; output: number } | undefined;
   // call_id -> tool_call object, so a later function_call_output can fill output.
   const toolCallsById = new Map<string, { name: string; input: string; output: string }>();
@@ -38,6 +56,8 @@ export function parseCodexRollout(content: string): ParsedRollout {
 
     if (rec.type === "session_meta") {
       if (typeof payload.cwd === "string") cwd = payload.cwd;
+      if (typeof payload.originator === "string") originator = payload.originator;
+      if (typeof payload.thread_source === "string") threadSource = payload.thread_source;
       continue;
     }
 
@@ -78,7 +98,7 @@ export function parseCodexRollout(content: string): ParsedRollout {
     }
   }
 
-  return { cwd, turns, tokenUsage };
+  return { cwd, originator, threadSource, turns, tokenUsage };
 }
 
 function extractText(content: any): string {
@@ -129,6 +149,7 @@ export async function collectCodexTraceFrom(
       continue;
     }
     const parsed = parseCodexRollout(content);
+    if (isImportedRollout(parsed)) continue; // foreign-agent session imported by the desktop app
     if (!codexCwdMatches(parsed.cwd, workspacePath)) continue;
 
     for (const turn of parsed.turns) {
