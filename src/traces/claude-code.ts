@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import type { AgentTrace, TraceTurn } from "./types.js";
 import { rateTraceQuality } from "./quality.js";
 import { encodeProjectPath } from "./path-encode.js";
+import { pickPrimaryModel } from "./model.js";
 
 /**
  * Collect Claude Code traces scoped to a specific workspace.
@@ -57,6 +58,7 @@ export async function collectClaudeCodeTrace(
   if (projectDirs.length === 0) return null;
 
   const turns: TraceTurn[] = [];
+  const models: (string | undefined)[] = [];
 
   for (const projectDir of projectDirs) {
     // Read all JSONL session files modified after startTime
@@ -97,6 +99,7 @@ export async function collectClaudeCodeTrace(
                 }
               } else if (entry.type === "assistant") {
                 const msg = entry.message;
+                if (msg?.model) models.push(msg.model);
                 if (!msg?.content) continue;
                 const text = extractText(msg.content);
                 const toolCalls = extractToolCalls(msg.content);
@@ -124,10 +127,12 @@ export async function collectClaudeCodeTrace(
 
   if (turns.length === 0) return null;
 
+  const claudeModel = pickPrimaryModel(models);
   return {
     agent: "claude-code",
     turns,
     trace_quality: rateTraceQuality(turns),
+    ...(claudeModel ? { model_raw: claudeModel } : {}),
   };
 }
 

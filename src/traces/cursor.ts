@@ -4,6 +4,7 @@ import { homedir, platform } from "node:os";
 import { execSync } from "node:child_process";
 import type { AgentTrace, TraceTurn } from "./types.js";
 import { rateTraceQuality } from "./quality.js";
+import { pickPrimaryModel } from "./model.js";
 
 /**
  * Collect Cursor traces for a specific workspace.
@@ -51,14 +52,16 @@ export async function collectCursorTrace(
 
   // Step 2: Extract messages from global DB
   const globalDb = join(cursorBase, "globalStorage", "state.vscdb");
-  const turns = await extractBubbles(globalDb, composerIds, startTime);
+  const { turns, models } = await extractBubbles(globalDb, composerIds, startTime);
 
   if (turns.length === 0) return null;
 
+  const cursorModel = pickPrimaryModel(models);
   return {
     agent: "cursor",
     turns,
     trace_quality: rateTraceQuality(turns),
+    ...(cursorModel ? { model_raw: cursorModel } : {}),
   };
 }
 
@@ -167,13 +170,14 @@ async function extractBubbles(
   globalDbPath: string,
   composerIds: string[],
   startTime: Date,
-): Promise<TraceTurn[]> {
+): Promise<{ turns: TraceTurn[]; models: string[] }> {
   const turns: TraceTurn[] = [];
+  const models: string[] = [];
 
   try {
     await stat(globalDbPath);
   } catch {
-    return turns;
+    return { turns, models };
   }
 
   for (const composerId of composerIds) {
@@ -255,6 +259,7 @@ async function extractBubbles(
             : undefined;
 
           if (content || toolCalls) {
+            if (bubble?.modelInfo?.modelName) models.push(bubble.modelInfo.modelName);
             turns.push({
               role: "assistant",
               content: (content || "[tool use]").slice(0, 2000),
@@ -270,5 +275,5 @@ async function extractBubbles(
     }
   }
 
-  return turns;
+  return { turns, models };
 }

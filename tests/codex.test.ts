@@ -75,6 +75,17 @@ describe("parseCodexRollout", () => {
     ].join("\n");
     expect(parseCodexRollout(content).turns).toHaveLength(1);
   });
+
+  it("captures model from turn_context and provider from session_meta", () => {
+    const content = [
+      line({ timestamp: "t1", type: "session_meta", payload: { cwd: "/x", model_provider: "openai" } }),
+      line({ timestamp: "t2", type: "turn_context", payload: { model: "gpt-5.5" } }),
+      line({ timestamp: "t3", type: "turn_context", payload: { model: "gpt-5.5" } }),
+    ].join("\n");
+    const p = parseCodexRollout(content);
+    expect(p.modelRaw).toBe("gpt-5.5");
+    expect(p.modelProvider).toBe("openai");
+  });
 });
 
 describe("codexCwdMatches", () => {
