@@ -15,4 +15,8 @@ describe("pickPrimaryModel", () => {
   it("breaks ties by first appearance", () => {
     expect(pickPrimaryModel(["a", "b", "a", "b"])).toBe("a");
   });
+  it("ignores Claude Code's <synthetic> sentinel", () => {
+    expect(pickPrimaryModel(["<synthetic>", "<synthetic>", "claude-opus-4-8"])).toBe("claude-opus-4-8");
+    expect(pickPrimaryModel(["<synthetic>"])).toBeUndefined();
+  });
 });
