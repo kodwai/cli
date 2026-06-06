@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { execSync } from "node:child_process";
 import { display } from "../utils/display.js";
 import { ensureAuth, promptChoice } from "../utils/auth.js";
+import { agentLabel } from "../traces/detector.js";
 import { ensureCanSubmit } from "../utils/entitlement.js";
 import { ensureConsent } from "../utils/consent.js";
 import { ensureGit } from "../utils/git.js";
@@ -59,8 +60,9 @@ export async function startChallenge(idOrSlug: string, apiUrl?: string): Promise
   const agentIdx = await promptChoice("Which agent will you use?", [
     "Claude Code",
     "Cursor",
+    "Codex",
   ]);
-  const agentChoice = (["claude-code", "cursor"] as const)[agentIdx];
+  const agentChoice = (["claude-code", "cursor", "codex"] as const)[agentIdx];
 
   // 4. Create workspace
   const safeName = challenge.slug || challenge.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -142,12 +144,12 @@ export async function startChallenge(idOrSlug: string, apiUrl?: string): Promise
   display.problemStatement(challenge.problem_statement_md);
   display.divider();
 
-  const agentLabel = agentChoice === "claude-code" ? "Claude Code" : agentChoice === "cursor" ? "Cursor" : "your agent";
+  const agentLabelText = agentLabel(agentChoice);
   display.info(`⏱  Time limit: ${challenge.time_limit_minutes} minutes`);
-  display.info(`🔧  Agent: ${agentLabel}`);
+  display.info(`🔧  Agent: ${agentLabelText}`);
   display.info("");
   display.info(`  cd ${dirName}`);
-  display.info(`  Open the project with ${agentLabel} and start coding!`);
+  display.info(`  Open the project with ${agentLabelText} and start coding!`);
   display.info("");
   display.info("  When you're done, run:");
   display.info(`    kodwai submit`);
