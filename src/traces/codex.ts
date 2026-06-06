@@ -169,7 +169,10 @@ async function listRolloutFiles(sessionsRoot: string, startTime: Date): Promise<
     }
   }
   await walk(sessionsRoot);
-  return out;
+  // Sort lexicographically by full path for deterministic, chronological order:
+  // the Codex layout YYYY/MM/DD/rollout-<ISO-timestamp>-<uuid>.jsonl sorts by
+  // time under a plain string sort, making token_usage last-wins stable.
+  return out.sort();
 }
 
 /** Collect a Codex trace for a workspace from the user's ~/.codex/sessions. */

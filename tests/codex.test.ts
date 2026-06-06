@@ -122,6 +122,24 @@ describe("collectCodexTraceFrom", () => {
     expect(trace).toBeNull();
   });
 
+  it("keeps only in-window turns when the session file is recent but has older turns", async () => {
+    const root = await mkdtemp(join(tmpdir(), "codex-sessions-"));
+    const ws = "/Users/x/kodwai-demo";
+    const start = new Date("2026-06-06T12:00:00.000Z");
+
+    // File mtime is left as "now" (>= start) so it passes the mtime pre-filter;
+    // the session contains one turn before start and one after.
+    await writeSession(root, "2026/06/06", "rollout-mixed.jsonl", [
+      JSON.stringify({ timestamp: "2026-06-06T11:59:00.000Z", type: "session_meta", payload: { cwd: ws } }),
+      JSON.stringify({ timestamp: "2026-06-06T11:59:30.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "before window" }] } }),
+      JSON.stringify({ timestamp: "2026-06-06T12:05:00.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "inside window" }] } }),
+    ]);
+
+    const trace = await collectCodexTraceFrom(root, start, ws);
+    expect(trace).not.toBeNull();
+    expect(trace!.turns.map((t) => t.content)).toEqual(["inside window"]);
+  });
+
   it("returns null when the sessions root does not exist", async () => {
     const trace = await collectCodexTraceFrom(join(tmpdir(), "definitely-missing-codex-root"), new Date(), "/x");
     expect(trace).toBeNull();
