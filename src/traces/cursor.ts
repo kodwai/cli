@@ -120,13 +120,44 @@ async function getComposerIdsFromDb(dbPath: string): Promise<string[]> {
       { encoding: "utf-8", timeout: 5000 },
     ).trim();
 
-    if (!result) return [];
-    const data = JSON.parse(result);
-    const composers = data.allComposers || [];
-    return composers.map((c: any) => c.composerId).filter(Boolean);
+    return parseComposerIds(result);
   } catch {
     return [];
   }
+}
+
+/**
+ * Extract composer IDs from a workspace's `composer.composerData` JSON value.
+ *
+ * Cursor has used two schemas here:
+ *  - Legacy: a full `allComposers` array of `{ composerId }` objects.
+ *  - Current: newer versions drop `allComposers` and keep only lightweight
+ *    `selectedComposerIds` / `lastFocusedComposerIds` pointers. Freshly-opened
+ *    workspaces use this schema, so reading `allComposers` alone yielded nothing.
+ *
+ * We union all three sources (de-duplicated) so both schemas work.
+ */
+export function parseComposerIds(rawJson: string): string[] {
+  if (!rawJson) return [];
+
+  let data: any;
+  try {
+    data = JSON.parse(rawJson);
+  } catch {
+    return [];
+  }
+
+  const ids = new Set<string>();
+  for (const c of data.allComposers || []) {
+    if (c?.composerId) ids.add(c.composerId);
+  }
+  for (const id of data.selectedComposerIds || []) {
+    if (id) ids.add(id);
+  }
+  for (const id of data.lastFocusedComposerIds || []) {
+    if (id) ids.add(id);
+  }
+  return [...ids];
 }
 
 /**
