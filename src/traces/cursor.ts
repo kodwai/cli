@@ -227,6 +227,11 @@ async function extractBubbles(
           if (bubbleTime < startTime) continue;
         }
 
+        // Cursor records the selected model on bubbles (often on the user bubble
+        // and on tool-only assistant bubbles), independent of whether the bubble
+        // produces a displayable turn — so collect it here, before turn filtering.
+        if (bubble.modelInfo?.modelName) models.push(bubble.modelInfo.modelName);
+
         const btype = bubble.type; // 1 = user, 2 = assistant
         const text = bubble.text || "";
         const codeBlocks = bubble.codeBlocks || [];
@@ -259,7 +264,6 @@ async function extractBubbles(
             : undefined;
 
           if (content || toolCalls) {
-            if (bubble?.modelInfo?.modelName) models.push(bubble.modelInfo.modelName);
             turns.push({
               role: "assistant",
               content: (content || "[tool use]").slice(0, 2000),
