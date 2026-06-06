@@ -53,6 +53,21 @@ describe("parseCodexRollout", () => {
     expect(parseCodexRollout(content).tokenUsage).toEqual({ input: 120, output: 45 });
   });
 
+  it("reads token usage from the nested total_token_usage shape (real Codex)", () => {
+    const content = line({
+      timestamp: "t1",
+      type: "event_msg",
+      payload: {
+        type: "token_count",
+        info: {
+          total_token_usage: { input_tokens: 1000, output_tokens: 250, total_tokens: 1250 },
+          last_token_usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      },
+    });
+    expect(parseCodexRollout(content).tokenUsage).toEqual({ input: 1000, output: 250 });
+  });
+
   it("skips malformed lines without throwing", () => {
     const content = [
       "not json",

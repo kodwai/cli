@@ -42,9 +42,13 @@ export function parseCodexRollout(content: string): ParsedRollout {
     }
 
     if (rec.type === "event_msg" && payload.type === "token_count") {
+      // Real Codex nests cumulative totals under info.total_token_usage; older/
+      // assumed shapes put the counts flat on info. Prefer the nested totals,
+      // fall back to last_token_usage, then to the flat shape.
       const info = payload.info || payload;
-      const input = Number(info.input_tokens ?? info.input ?? 0) || 0;
-      const output = Number(info.output_tokens ?? info.output ?? 0) || 0;
+      const usage = info.total_token_usage || info.last_token_usage || info;
+      const input = Number(usage.input_tokens ?? usage.input ?? 0) || 0;
+      const output = Number(usage.output_tokens ?? usage.output ?? 0) || 0;
       if (input || output) tokenUsage = { input, output };
       continue;
     }
