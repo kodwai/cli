@@ -4,7 +4,7 @@ The official CLI for [kodwai](https://kodwai.com) — the AI-agent coding challe
 
 ## What is kodwai?
 
-kodwai is a platform where developers solve real-world coding challenges using AI agents on their own machine. Use Claude Code, Cursor, or any AI coding agent you prefer — kodwai captures your session and scores how you collaborate with AI.
+kodwai is a platform where developers solve real-world coding challenges using AI agents on their own machine. Use Claude Code, Cursor, Codex, or any AI coding agent you prefer — kodwai captures your session and scores how you collaborate with AI.
 
 ## Getting Started
 
@@ -38,7 +38,7 @@ npx @kodwai/cli challenge <slug>
 
 This will:
 1. Sign you in via the browser if needed (or use your stored token)
-2. Ask which AI agent you'll use (Claude Code, Cursor, etc.)
+2. Ask which AI agent you'll use (Claude Code, Cursor, Codex, etc.)
 3. Create a workspace with the problem statement and starter files
 4. Start the timer
 
@@ -106,7 +106,7 @@ export KODWAI_API_URL=http://localhost:8000
 
 - **Node.js 20+**
 - **Git** (auto-installed if missing)
-- An AI coding agent of your choice (Claude Code, Cursor, etc.)
+- An AI coding agent of your choice (Claude Code, Cursor, Codex, etc.)
 
 ## Privacy
 

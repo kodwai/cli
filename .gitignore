@@ -32,3 +32,6 @@ pnpm-debug.log*
 # Test artifacts
 coverage/
 .nyc_output/
+
+# Superpowers skill artifacts (local planning/specs, not part of the repo)
+docs/superpowers/
