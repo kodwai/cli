@@ -1,4 +1,8 @@
-import type { TraceTurn } from "./types.js";
+import { readdir, readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import type { AgentTrace, TraceTurn } from "./types.js";
+import { rateTraceQuality } from "./quality.js";
 
 export interface ParsedRollout {
   cwd: string | null;
@@ -88,4 +92,91 @@ export function codexCwdMatches(cwd: string | null, workspacePath: string): bool
   const a = cwd.replace(/\\/g, "/").replace(/\/+$/, "");
   const b = workspacePath.replace(/\\/g, "/").replace(/\/+$/, "");
   return a === b || a.startsWith(b + "/") || b.startsWith(a + "/");
+}
+
+/**
+ * Collect a Codex trace from a given sessions root (testable core).
+ *
+ * Codex stores sessions globally, so we scope to the challenge by matching each
+ * session's `cwd` (session_meta) to the workspace and filtering turns to the
+ * challenge time window.
+ */
+export async function collectCodexTraceFrom(
+  sessionsRoot: string,
+  startTime: Date,
+  workspacePath: string,
+): Promise<AgentTrace | null> {
+  let files: string[];
+  try {
+    files = await listRolloutFiles(sessionsRoot, startTime);
+  } catch {
+    return null; // sessions root missing / unreadable
+  }
+  if (files.length === 0) return null;
+
+  const turns: TraceTurn[] = [];
+  let tokenUsage: { input: number; output: number } | undefined;
+
+  for (const file of files) {
+    let content: string;
+    try {
+      content = await readFile(file, "utf-8");
+    } catch {
+      continue;
+    }
+    const parsed = parseCodexRollout(content);
+    if (!codexCwdMatches(parsed.cwd, workspacePath)) continue;
+
+    for (const turn of parsed.turns) {
+      if (turn.timestamp) {
+        const ts = new Date(turn.timestamp);
+        if (!Number.isNaN(ts.getTime()) && ts < startTime) continue;
+      }
+      turns.push(turn);
+    }
+    if (parsed.tokenUsage) tokenUsage = parsed.tokenUsage;
+  }
+
+  if (turns.length === 0) return null;
+
+  turns.sort((a, b) => (a.timestamp || "").localeCompare(b.timestamp || ""));
+
+  return {
+    agent: "codex",
+    turns,
+    ...(tokenUsage ? { token_usage: tokenUsage } : {}),
+    trace_quality: rateTraceQuality(turns),
+  };
+}
+
+/** Recursively collect rollout-*.jsonl files with mtime >= startTime. */
+async function listRolloutFiles(sessionsRoot: string, startTime: Date): Promise<string[]> {
+  const out: string[] = [];
+  async function walk(dir: string): Promise<void> {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile() && entry.name.startsWith("rollout-") && entry.name.endsWith(".jsonl")) {
+        try {
+          const s = await stat(full);
+          if (s.mtime >= startTime) out.push(full);
+        } catch {
+          // skip unreadable
+        }
+      }
+    }
+  }
+  await walk(sessionsRoot);
+  return out;
+}
+
+/** Collect a Codex trace for a workspace from the user's ~/.codex/sessions. */
+export async function collectCodexTrace(
+  startTime: Date,
+  workspacePath: string,
+): Promise<AgentTrace | null> {
+  const sessionsRoot = join(homedir(), ".codex", "sessions");
+  return collectCodexTraceFrom(sessionsRoot, startTime, workspacePath);
 }

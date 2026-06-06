@@ -71,3 +71,59 @@ describe("codexCwdMatches", () => {
     expect(codexCwdMatches(null, "/a/b")).toBe(false);
   });
 });
+
+import { mkdtemp, mkdir, writeFile, utimes } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { collectCodexTraceFrom } from "../src/traces/codex.js";
+
+describe("collectCodexTraceFrom", () => {
+  async function writeSession(root: string, day: string, name: string, lines: string[]) {
+    const dir = join(root, day);
+    await mkdir(dir, { recursive: true });
+    const file = join(dir, name);
+    await writeFile(file, lines.join("\n"), "utf-8");
+    return file;
+  }
+
+  it("returns turns only from the session whose cwd matches the workspace", async () => {
+    const root = await mkdtemp(join(tmpdir(), "codex-sessions-"));
+    const ws = "/Users/x/kodwai-demo";
+    const start = new Date("2026-06-06T12:00:00.000Z");
+
+    await writeSession(root, "2026/06/06", "rollout-match.jsonl", [
+      JSON.stringify({ timestamp: "2026-06-06T12:01:00.000Z", type: "session_meta", payload: { cwd: ws } }),
+      JSON.stringify({ timestamp: "2026-06-06T12:02:00.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] } }),
+      JSON.stringify({ timestamp: "2026-06-06T12:03:00.000Z", type: "response_item", payload: { type: "message", role: "assistant", content: [{ type: "output_text", text: "hi" }] } }),
+    ]);
+    await writeSession(root, "2026/06/06", "rollout-other.jsonl", [
+      JSON.stringify({ timestamp: "2026-06-06T12:02:00.000Z", type: "session_meta", payload: { cwd: "/Users/x/other" } }),
+      JSON.stringify({ timestamp: "2026-06-06T12:02:30.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "nope" }] } }),
+    ]);
+
+    const trace = await collectCodexTraceFrom(root, start, ws);
+    expect(trace).not.toBeNull();
+    expect(trace!.agent).toBe("codex");
+    expect(trace!.turns.map((t) => t.content)).toEqual(["hello", "hi"]);
+  });
+
+  it("excludes turns before startTime and returns null when nothing remains", async () => {
+    const root = await mkdtemp(join(tmpdir(), "codex-sessions-"));
+    const ws = "/Users/x/kodwai-demo";
+    const start = new Date("2026-06-06T12:00:00.000Z");
+
+    const file = await writeSession(root, "2026/06/06", "rollout-old.jsonl", [
+      JSON.stringify({ timestamp: "2026-06-06T09:00:00.000Z", type: "session_meta", payload: { cwd: ws } }),
+      JSON.stringify({ timestamp: "2026-06-06T09:01:00.000Z", type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_text", text: "old" }] } }),
+    ]);
+    await utimes(file, new Date("2026-06-06T09:05:00.000Z"), new Date("2026-06-06T09:05:00.000Z"));
+
+    const trace = await collectCodexTraceFrom(root, start, ws);
+    expect(trace).toBeNull();
+  });
+
+  it("returns null when the sessions root does not exist", async () => {
+    const trace = await collectCodexTraceFrom(join(tmpdir(), "definitely-missing-codex-root"), new Date(), "/x");
+    expect(trace).toBeNull();
+  });
+});
