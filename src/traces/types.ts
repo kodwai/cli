@@ -13,7 +13,7 @@ export interface AgentTrace {
 }
 
 export interface AgentDetection {
-  agent: "claude-code" | "cursor" | "unknown";
+  agent: "claude-code" | "cursor" | "codex" | "unknown";
   confidence: "high" | "medium" | "low";
   trace: AgentTrace | null;
 }
