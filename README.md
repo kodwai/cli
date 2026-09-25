@@ -1,10 +1,10 @@
 # @kodwai/cli
 
-The official CLI for [kodwai](https://kodwai.com) — the AI-agent coding challenge platform for developers.
+The official CLI for [kodwai](https://www.kodwai.com), the AI-agent coding challenge platform for developers.
 
 ## What is kodwai?
 
-kodwai is a platform where developers solve real-world coding challenges using AI agents on their own machine. Use Claude Code, Cursor, Codex, or any AI coding agent you prefer — kodwai captures your session and scores how you collaborate with AI.
+kodwai is a platform where developers solve real coding challenges on their own machine with their own AI coding agent (Claude Code, Cursor, or Codex) and get scored on how well they direct the agent, across three axes: Direction, Outcome, and Lift.
 
 ## Getting Started
 
@@ -38,22 +38,29 @@ npx @kodwai/cli challenge <slug>
 
 This will:
 1. Sign you in via the browser if needed (or use your stored token)
-2. Ask which AI agent you'll use (Claude Code, Cursor, Codex, etc.)
-3. Create a workspace with the problem statement and starter files
+2. Ask which AI agent you'll use (Claude Code, Cursor, or Codex)
+3. Create a workspace with the problem statement, starter files and tests, and init a git repo
 4. Start the timer
 
 Work with your AI agent in your own terminal, then submit:
 
 ```bash
-kodwai submit
+npx @kodwai/cli submit
 ```
 
 Your code, git history, test results, and AI agent traces are collected and scored.
 
 ### How scoring works
 
-- **70% Objective** — test pass rate, code quality, complexity, time efficiency, iteration patterns
-- **30% Analytical** — AI-powered evaluation of problem solving, code quality, and agent collaboration (requires your Anthropic API key)
+Each submission gets a score from 0 to 100 across three axes:
+
+- **Direction**: how you steer, verify, and decompose.
+- **Outcome**: what shipped, replayed and stress-tested to prove it holds.
+- **Lift**: how far you beat a solo AI, not just that you passed.
+
+Direction carries the most weight. Passing tests is necessary but not sufficient. Every signal cites its own evidence from your transcript, commits, and test runs, and the score comes with a confidence interval. More at [kodwai.com/ai-collaboration-score](https://www.kodwai.com/ai-collaboration-score).
+
+Every account gets 3 free submissions scored on kodwai's own Anthropic key. After that, connect your own Anthropic API key in Settings for unlimited submissions. The key is encrypted at rest and only used to score your own work.
 
 ### Run an interview session
 
@@ -106,7 +113,7 @@ export KODWAI_API_URL=http://localhost:8000
 
 - **Node.js 20+**
 - **Git** (auto-installed if missing)
-- An AI coding agent of your choice (Claude Code, Cursor, Codex, etc.)
+- An AI coding agent: Claude Code, Cursor, or Codex
 
 ## Privacy
 
@@ -120,9 +127,10 @@ The CLI source is publicly available. [View the source](https://github.com/kodwa
 
 ## Links
 
-- [Website](https://kodwai.com)
-- [Challenges](https://kodwai.com/dev/challenges)
-- [Leaderboard](https://kodwai.com/dev/leaderboard)
+- [Website](https://www.kodwai.com)
+- [Challenges](https://www.kodwai.com/challenges)
+- [Leaderboard](https://app.kodwai.com/dev/leaderboard)
+- [For hiring teams](https://www.kodwai.com/hiring)
 
 ## License
 
