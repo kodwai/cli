@@ -1,8 +1,8 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { createInterface } from "node:readline";
 import { display } from "./display.js";
+import { confirm, isInteractive } from "./prompt.js";
 
 const CONFIG_DIR = join(homedir(), ".kodwai");
 const CONSENT_FILE = join(CONFIG_DIR, "consent.json");
@@ -64,7 +64,10 @@ export async function ensureConsent(): Promise<void> {
   display.divider();
   console.log("");
 
-  const answer = await promptConfirm("  I understand, continue (y/n): ");
+  if (!isInteractive()) {
+    throw new Error("Run this once in a terminal to accept the data collection notice above.");
+  }
+  const answer = await confirm("  I understand, continue (y/n): ");
   if (!answer) {
     console.log("");
     display.info("You can review the CLI source code at github.com/kodwai/cli");
@@ -74,14 +77,4 @@ export async function ensureConsent(): Promise<void> {
 
   await saveConsent();
   console.log("");
-}
-
-function promptConfirm(question: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes");
-    });
-  });
 }

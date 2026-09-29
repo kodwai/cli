@@ -42,13 +42,25 @@ This will:
 3. Create a workspace with the problem statement, starter files and tests, and init a git repo
 4. Start the timer
 
-Work with your AI agent in your own terminal, then submit:
+Skip the agent question with `--agent claude-code|cursor|codex`.
+
+Work with your AI agent in your own terminal. From anywhere inside the workspace:
 
 ```bash
-npx @kodwai/cli submit
+kodwai status     # time left and the files collected so far
+kodwai submit     # submit, then wait for your score in the terminal
 ```
 
 Your code, git history, test results, and AI agent traces are collected and scored.
+Dependencies, build output, lockfiles and secret files (`.env`, keys) are never sent,
+and `.gitignore` is respected. `kodwai submit --yes` skips the confirmation (for scripts),
+and `--no-wait` prints the results link instead of waiting for the score.
+
+Only one challenge can be in progress at a time. To drop one without scoring it:
+
+```bash
+kodwai abandon
+```
 
 ### How scoring works
 

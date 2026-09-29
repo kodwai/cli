@@ -6,11 +6,10 @@ import { createEventSender } from "../streaming/event-sender.js";
 import { createFileWatcher } from "../streaming/file-watcher.js";
 import { createTranscriptWatcher } from "../streaming/transcript-watcher.js";
 import { display } from "../utils/display.js";
-
-const DEFAULT_API_URL = "https://api.kodwai.com";
+import { resolveApiUrl } from "../utils/api.js";
 
 export async function startSession(sessionId: string, apiUrl?: string, sessionToken?: string): Promise<void> {
-  const baseUrl = apiUrl || process.env.KODWAI_API_URL || DEFAULT_API_URL;
+  const baseUrl = resolveApiUrl(apiUrl);
 
   display.banner();
   display.info("Connecting to Kodwai...");

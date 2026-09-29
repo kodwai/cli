@@ -1,7 +1,6 @@
 import { display } from "../utils/display.js";
+import { resolveApiUrl } from "../utils/api.js";
 import { loginWithBrowser, resolveWebUrl } from "../utils/auth.js";
-
-const DEFAULT_API_URL = "https://api.kodwai.com";
 
 /**
  * Sign in via the browser (OAuth loopback flow). Always runs the browser flow,
@@ -9,7 +8,7 @@ const DEFAULT_API_URL = "https://api.kodwai.com";
  * the signed-in CLI account.
  */
 export async function login(apiUrl?: string, webUrl?: string): Promise<void> {
-  const baseUrl = apiUrl || process.env.KODWAI_API_URL || DEFAULT_API_URL;
+  const baseUrl = resolveApiUrl(apiUrl);
   const web = resolveWebUrl(baseUrl, webUrl);
 
   display.banner();

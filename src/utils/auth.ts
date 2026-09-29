@@ -1,10 +1,10 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { createInterface } from "node:readline";
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { openBrowser } from "./browser.js";
+import { ApiError, apiRequest } from "./api.js";
 
 const CONFIG_DIR = join(homedir(), ".kodwai");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
@@ -63,8 +63,10 @@ async function readConfig(): Promise<StoredConfig> {
 }
 
 async function writeConfig(config: StoredConfig): Promise<void> {
-  await mkdir(CONFIG_DIR, { recursive: true });
-  await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), "utf-8");
+  await mkdir(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  // The file holds a bearer token: owner-only, and re-tightened if it already existed.
+  await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), { encoding: "utf-8", mode: 0o600 });
+  await chmod(CONFIG_FILE, 0o600).catch(() => {});
 }
 
 export async function getStoredToken(): Promise<string | null> {
@@ -79,19 +81,29 @@ export async function clearToken(): Promise<void> {
   await writeConfig(config);
 }
 
-/** Fetch the current user from the API using the stored token, or null. */
+/** Fetch the current user from the API using the stored token, or null (signed out, or unreachable). */
 export async function getCurrentUser(baseUrl: string): Promise<AuthUser | null> {
+  try {
+    return await fetchMe(baseUrl);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The signed-in user, null when there is no valid sign-in (no token, or the API
+ * says 401/403). Throws ApiError when the API can't be reached, so callers can
+ * say "you're offline" instead of "you're signed out".
+ */
+export async function fetchMe(baseUrl: string): Promise<AuthUser | null> {
   const token = await getStoredToken();
   if (!token) return null;
   try {
-    const resp = await fetch(`${baseUrl}/api/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (resp.ok) return (await resp.json()) as AuthUser;
-  } catch {
-    // network error / invalid token
+    return await apiRequest<AuthUser>(baseUrl, "/api/auth/me", { token, timeoutMs: 15_000, retries: 1 });
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 401 || e.status === 403)) return null;
+    throw e;
   }
-  return null;
 }
 
 function resultPage(title: string, message: string, ok: boolean): string {
@@ -147,6 +159,7 @@ export async function loginWithBrowser(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code }),
+          signal: AbortSignal.timeout(30_000),
         });
         if (!tokenResp.ok) {
           const err = await tokenResp.json().catch(() => ({ detail: "Token exchange failed" }));
@@ -191,38 +204,13 @@ export async function loginWithBrowser(
 }
 
 export async function ensureAuth(baseUrl: string, webUrl?: string): Promise<string> {
-  // Reuse a valid stored token if we have one.
+  // Reuse the stored token while the API still accepts it. A network failure is
+  // reported as such; only a rejected token sends the user to the browser.
   const stored = await getStoredToken();
-  if (stored) {
-    try {
-      const resp = await fetch(`${baseUrl}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${stored}` },
-      });
-      if (resp.ok) return stored;
-    } catch {
-      // fall through to browser login
-    }
-  }
+  if (stored && (await fetchMe(baseUrl))) return stored;
 
+  if (stored) console.log("\n  Your sign-in has expired. Signing you in again...");
   const { token } = await loginWithBrowser(baseUrl, resolveWebUrl(baseUrl, webUrl));
   console.log("  Signed in successfully!\n");
   return token;
-}
-
-export function promptChoice(question: string, choices: string[]): Promise<number> {
-  return new Promise((resolve) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    console.log(`\n  ${question}\n`);
-    choices.forEach((c, i) => console.log(`    ${i + 1}) ${c}`));
-    console.log("");
-    rl.question("  Choice: ", (answer) => {
-      rl.close();
-      const idx = parseInt(answer.trim(), 10) - 1;
-      if (idx >= 0 && idx < choices.length) {
-        resolve(idx);
-      } else {
-        resolve(0); // Default to first
-      }
-    });
-  });
 }
