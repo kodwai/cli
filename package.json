@@ -1,7 +1,15 @@
 {
   "name": "@kodwai/cli",
-  "version": "1.9.1",
-  "description": "Kodwai CLI \u2014 AI-agent coding challenges and interview sessions",
+  "version": "1.9.2",
+  "description": "Real coding challenges you solve with your own AI agent. kodwai scores how well you direct it: Direction, Outcome, Lift.",
+  "homepage": "https://www.kodwai.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kodwai/cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kodwai/cli/issues"
+  },
   "type": "module",
   "bin": {
     "kodwai": "dist/bin/kodwai.js"
@@ -25,7 +33,7 @@
     "interview",
     "hiring"
   ],
-  "license": "UNLICENSED",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": false,
   "dependencies": {
     "chalk": "^5.4.0",
