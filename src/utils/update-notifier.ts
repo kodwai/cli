@@ -1,4 +1,5 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { spawn, spawnSync } from "node:child_process";
@@ -87,12 +88,51 @@ async function newerVersion(force: boolean): Promise<string | null> {
   return latest && semverGt(latest, CLI_VERSION) ? latest : null;
 }
 
-type Installer = { kind: "npx" } | { kind: "global"; cmd: string; args: string[]; display: string } | { kind: "unknown" };
+type Installer =
+  | { kind: "npx" }
+  | { kind: "global"; cmd: string; args: string[]; display: string; cwd?: string }
+  | { kind: "unknown" };
+
+/** The project a copy lives in when it's a project dependency (its package.json lists @kodwai/cli). */
+function projectRootOf(p: string, readPkg: (path: string) => string | null): string | null {
+  const idx = p.lastIndexOf(`/node_modules/${PKG}/`);
+  if (idx === -1) return null;
+  const root = p.slice(0, idx);
+  const raw = readPkg(`${root}/package.json`);
+  if (!raw) return null; // a global prefix (e.g. /usr/local/lib) has no package.json
+  try {
+    const pkg = JSON.parse(raw);
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies, ...pkg.optionalDependencies };
+    return PKG in deps ? root : null;
+  } catch {
+    return null;
+  }
+}
+
+function readFileOrNull(path: string): string | null {
+  try {
+    return readFileSync(path, "utf-8");
+  } catch {
+    return null;
+  }
+}
 
 /** How this copy of the CLI was installed, judged from where it runs from. */
-export function detectInstaller(binPath: string, env: NodeJS.ProcessEnv = process.env): Installer {
+export function detectInstaller(
+  binPath: string,
+  env: NodeJS.ProcessEnv = process.env,
+  readPkg: (path: string) => string | null = readFileOrNull,
+): Installer {
   const p = binPath.replace(/\\/g, "/");
-  if (p.includes("/_npx/") || env.npm_command === "exec") return { kind: "npx" };
+  if (p.includes("/_npx/")) return { kind: "npx" };
+  // A copy installed into a project (npm i @kodwai/cli there). npx prefers it over
+  // any global or cached copy, so that's the one that has to be updated.
+  const project = projectRootOf(p, readPkg);
+  if (project) {
+    return { kind: "global", cmd: "npm", args: ["install", `${PKG}@latest`], cwd: project,
+      display: `npm i ${PKG}@latest (in ${project})` };
+  }
+  if (env.npm_command === "exec") return { kind: "npx" };
   if (p.includes("/.bun/")) return { kind: "global", cmd: "bun", args: ["add", "-g", `${PKG}@latest`], display: `bun add -g ${PKG}@latest` };
   if (p.includes("/pnpm/") || p.includes("/.pnpm/")) {
     return { kind: "global", cmd: "pnpm", args: ["add", "-g", `${PKG}@latest`], display: `pnpm add -g ${PKG}@latest` };
@@ -159,9 +199,13 @@ export async function offerUpdate(binPath: string, argv: string[], force = false
     relaunch("npx", ["-y", `${PKG}@latest`, ...argv]);
   }
   console.error(`\n  Running: ${installer.display}\n`);
-  const install = spawnSync(installer.cmd, installer.args, { stdio: "inherit", shell: process.platform === "win32" });
+  const install = spawnSync(installer.cmd, installer.args, {
+    stdio: "inherit",
+    shell: process.platform === "win32",
+    cwd: installer.cwd,
+  });
   if (install.status !== 0) {
-    const sudo = process.platform !== "win32" && installer.cmd === "npm" ? `sudo ${installer.display}` : installer.display;
+    const sudo = process.platform !== "win32" && installer.cmd === "npm" && !installer.cwd ? `sudo ${installer.display}` : installer.display;
     console.error(`\n  The update didn't install. Try: ${sudo}`);
     console.error(`  Continuing on ${CLI_VERSION} for now.\n`);
     return;

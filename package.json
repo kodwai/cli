@@ -1,6 +1,6 @@
 {
   "name": "@kodwai/cli",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Kodwai CLI \u2014 AI-agent coding challenges and interview sessions",
   "type": "module",
   "bin": {
