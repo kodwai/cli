@@ -1,12 +1,11 @@
 import { display } from "../utils/display.js";
-import { getCurrentUser } from "../utils/auth.js";
-
-const DEFAULT_API_URL = "https://api.kodwai.com";
+import { resolveApiUrl } from "../utils/api.js";
+import { fetchMe } from "../utils/auth.js";
 
 /** Print the currently signed-in account. */
 export async function whoami(apiUrl?: string): Promise<void> {
-  const baseUrl = apiUrl || process.env.KODWAI_API_URL || DEFAULT_API_URL;
-  const user = await getCurrentUser(baseUrl);
+  const baseUrl = resolveApiUrl(apiUrl);
+  const user = await fetchMe(baseUrl); // throws a readable error when offline
   console.log("");
   if (!user) {
     display.info("  Not signed in. Run `kodwai login`.");

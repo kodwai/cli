@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 
 function ensureGitInPath(): void {
   // On Windows, Git may be installed but not in the current process PATH
@@ -167,4 +167,93 @@ export function ensureGit(): void {
       );
     }
   }
+}
+
+// Commit identity for commits the CLI makes itself. Passed with -c so a machine
+// with no user.name/user.email configured (fresh laptops, CI boxes) doesn't make
+// `git commit` fail, and so a global commit.gpgsign=true doesn't prompt or fail.
+const CLI_GIT_CONFIG = [
+  "-c", "user.name=kodwai",
+  "-c", "user.email=cli@kodwai.com",
+  "-c", "commit.gpgsign=false",
+  "-c", "core.autocrlf=false",
+];
+
+function git(cwd: string, args: string[], opts: { env?: NodeJS.ProcessEnv; maxBuffer?: number } = {}): string {
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    maxBuffer: opts.maxBuffer ?? 20_000_000,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: opts.env ?? process.env,
+    timeout: 60_000,
+  });
+}
+
+/** git init + one commit of the starter files. Safe on machines with no git identity or with signing on. */
+export function initWorkspaceRepo(cwd: string): void {
+  ensureGitInPath();
+  git(cwd, ["init", "-q"]);
+  git(cwd, ["add", "-A"]);
+  // Identity env vars outrank every git config level, including stray empty ones.
+  const env = {
+    ...process.env,
+    GIT_AUTHOR_NAME: "kodwai",
+    GIT_AUTHOR_EMAIL: "cli@kodwai.com",
+    GIT_COMMITTER_NAME: "kodwai",
+    GIT_COMMITTER_EMAIL: "cli@kodwai.com",
+  };
+  git(cwd, [...CLI_GIT_CONFIG, "commit", "-q", "--no-verify", "--allow-empty", "-m", "Initial: challenge starter files"], { env });
+}
+
+export interface GitData {
+  diff: string | null;
+  log: { hash: string; message: string; timestamp: string }[];
+}
+
+const MAX_DIFF_CHARS = 500_000;
+
+/**
+ * Everything that changed since the starter commit (committed, staged, unstaged
+ * and new untracked files), plus the commit log. Uses a throwaway index file so
+ * the developer's own staging area is never touched.
+ */
+export function collectGitData(cwd: string, tmpIndexPath: string): GitData {
+  const data: GitData = { diff: null, log: [] };
+  let root: string;
+  try {
+    root = git(cwd, ["rev-list", "--max-parents=0", "HEAD"]).trim().split("\n").pop() || "";
+  } catch {
+    return data; // not a repo, or no commits yet
+  }
+  if (!root) return data;
+
+  try {
+    const env = { ...process.env, GIT_INDEX_FILE: tmpIndexPath };
+    git(cwd, ["read-tree", "HEAD"], { env });
+    git(cwd, ["add", "-A"], { env });
+    data.diff = git(cwd, ["diff", "--cached", root], { env }).slice(0, MAX_DIFF_CHARS);
+  } catch {
+    try {
+      data.diff = git(cwd, ["diff", root]).slice(0, MAX_DIFF_CHARS);
+    } catch {
+      data.diff = null;
+    }
+  }
+
+  try {
+    const out = git(cwd, ["log", "--format=%H%x1f%s%x1f%aI%x1e"]);
+    data.log = out
+      .split("\x1e")
+      .map((rec) => rec.trim())
+      .filter(Boolean)
+      .map((rec) => {
+        const [hash, message, timestamp] = rec.split("\x1f");
+        return { hash, message: message ?? "", timestamp: timestamp ?? "" };
+      })
+      .filter((c) => /^[0-9a-f]{7,64}$/.test(c.hash));
+  } catch {
+    data.log = [];
+  }
+  return data;
 }
