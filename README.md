@@ -33,7 +33,7 @@ browser sign-in automatically if you're not signed in.
 ### Start a challenge
 
 ```bash
-npx @kodwai/cli challenge <slug>
+npx @kodwai/cli@latest challenge <slug>
 ```
 
 This will:
@@ -79,7 +79,7 @@ Every account gets 3 free submissions scored on kodwai's own Anthropic key. Afte
 If your interviewer sent you an invite email, use the session ID and token from the email:
 
 ```bash
-npx @kodwai/cli start <session-id> --token <session-token>
+npx @kodwai/cli@latest start <session-id> --token <session-token>
 ```
 
 This will:

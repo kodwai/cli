@@ -24,4 +24,14 @@ describe("detectInstaller", () => {
       .toMatchObject({ cmd: "bun" });
     expect(detectInstaller("/Users/a/code/kodwai/cli/dist/bin/kodwai.js", {}).kind).toBe("unknown");
   });
+
+  it("updates a project-local copy in its project, not globally", () => {
+    const bin = "/Users/a/tests/node_modules/@kodwai/cli/dist/bin/kodwai.js";
+    const read = (path: string) => (path === "/Users/a/tests/package.json" ? '{"dependencies":{"@kodwai/cli":"^1.8.0"}}' : null);
+    expect(detectInstaller(bin, { npm_command: "exec" }, read))
+      .toMatchObject({ kind: "global", cmd: "npm", args: ["install", "@kodwai/cli@latest"], cwd: "/Users/a/tests" });
+    // A global prefix has no package.json listing the CLI.
+    expect(detectInstaller("/usr/local/lib/node_modules/@kodwai/cli/dist/bin/kodwai.js", {}, () => null))
+      .toMatchObject({ kind: "global", args: ["install", "-g", "@kodwai/cli@latest"] });
+  });
 });
