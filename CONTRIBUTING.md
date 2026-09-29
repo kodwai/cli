@@ -4,7 +4,7 @@ Thanks for your interest in contributing to kodwai. Please read this short guide
 
 ## License & Contribution Terms
 
-This project is licensed under the **PolyForm Noncommercial License 1.0.0** — free for personal, educational, research, and non-commercial use; not free for commercial use (including marketing your own product).
+This project is licensed under the **PolyForm Noncommercial License 1.0.0**: free for personal, educational, research, and non-commercial use; not free for commercial use (including marketing your own product).
 
 By submitting a contribution (issue, pull request, patch, or any other material) to this repository, you agree that:
 
@@ -33,7 +33,7 @@ Use the **Feature Request** template. Explain the use case, not just the feature
 3. Make focused commits with clear messages.
 4. Run tests and linters locally before pushing.
 5. Open a PR referencing the related issue.
-6. Be patient — reviews happen when maintainers have bandwidth.
+6. Be patient. Reviews happen when maintainers have bandwidth.
 
 ### Commit Messages
 
