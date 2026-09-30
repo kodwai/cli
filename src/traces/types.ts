@@ -18,4 +18,6 @@ export interface AgentDetection {
   agent: "claude-code" | "cursor" | "codex" | "unknown";
   confidence: "high" | "medium" | "low";
   trace: AgentTrace | null;
+  /** Sessions linked to the workspace by the kodwai plugin or the CLI (not uploaded). */
+  linked_sessions?: number;
 }

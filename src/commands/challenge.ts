@@ -3,6 +3,7 @@ import { isAbsolute, join, resolve, relative, sep } from "node:path";
 import { display } from "../utils/display.js";
 import { ensureAuth, resolveWebUrl } from "../utils/auth.js";
 import { agentLabel, type AgentChoice } from "../traces/detector.js";
+import { agentFromEnv, linkEnvSession } from "../traces/linked-sessions.js";
 import { ensureCanSubmit } from "../utils/entitlement.js";
 import { ensureConsent } from "../utils/consent.js";
 import { ensureGit, initWorkspaceRepo } from "../utils/git.js";
@@ -134,7 +135,17 @@ async function findLocalWorkspace(dir: string, submissionId: string): Promise<st
   return null;
 }
 
-export async function startChallenge(idOrSlug: string, apiUrl?: string, agentFlag?: string): Promise<void> {
+export interface ChallengeOptions {
+  /** Accept the data collection notice without a prompt (the user agreed in their agent's chat). */
+  acceptNotice?: boolean;
+}
+
+export async function startChallenge(
+  idOrSlug: string,
+  apiUrl?: string,
+  agentFlag?: string,
+  opts: ChallengeOptions = {},
+): Promise<void> {
   const baseUrl = resolveApiUrl(apiUrl);
 
   display.banner();
@@ -143,6 +154,8 @@ export async function startChallenge(idOrSlug: string, apiUrl?: string, agentFla
   if (agentFlag && !agentChoice) {
     throw new Error(`Unknown agent "${agentFlag}". Use one of: claude-code, cursor, codex.`);
   }
+  // Run by an agent (no terminal): it's the agent whose environment we're in.
+  if (!agentChoice && !isInteractive()) agentChoice = agentFromEnv();
   // Check before starting: the clock starts server-side on start.
   if (!agentChoice && !isInteractive()) {
     throw new Error("Pass --agent claude-code|cursor|codex when running without a terminal.");
@@ -158,7 +171,7 @@ export async function startChallenge(idOrSlug: string, apiUrl?: string, agentFla
   }
 
   // 0. First-run consent, and git (needed for tracking changes & scoring)
-  await ensureConsent();
+  await ensureConsent(opts.acceptNotice);
   ensureGit();
 
   display.info("Connecting to kodwai...\n");
@@ -264,6 +277,8 @@ export async function startChallenge(idOrSlug: string, apiUrl?: string, agentFla
   };
   await mkdir(join(workspacePath, ".kodwai"), { recursive: true });
   await writeSubmissionMeta(join(workspacePath, ".kodwai", "submission.json"), meta);
+  // Started from inside the agent: link this session so submit reads its exact transcript.
+  const linked = await linkEnvSession(workspacePath, agentChoice, "challenge");
 
   display.success(`Workspace ready: ${dirName}/`);
 
@@ -277,8 +292,13 @@ export async function startChallenge(idOrSlug: string, apiUrl?: string, agentFla
   display.info(`🔧  Agent: ${label}`);
   display.info("");
   display.info("  Next:");
-  display.info(`    cd ${dirName}`);
-  display.info(`    Open it with ${label} and start building.`);
+  if (linked) {
+    display.info(`    This ${label} session is linked to the challenge. Keep going in it,`);
+    display.info(`    and keep your work inside ${dirName}/.`);
+  } else {
+    display.info(`    cd ${dirName}`);
+    display.info(`    Open it with ${label} and start building.`);
+  }
   display.info("");
   display.info("  Anytime:  kodwai status   (time left, files so far)");
   display.info("  Done:     kodwai submit");

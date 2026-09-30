@@ -4,14 +4,13 @@
  * Claude Code stores sessions under:
  *   ~/.claude/projects/<encoded-path>/<session-uuid>.jsonl
  *
- * It encodes the path by replacing path separators and the Windows drive colon
- * with dashes, e.g.:
- *   /Users/joe/myproject   → -Users-joe-myproject   (macOS/Linux)
- *   C:\Users\joe\myproject → C--Users-joe-myproject  (Windows)
- *
- * This helper is cross-platform: on macOS/Linux only "/" is present so the
- * output is identical to the previous `path.replace(/\//g, "-")` behaviour.
+ * It replaces every character that isn't an ASCII letter or digit with a dash,
+ * so separators, the Windows drive colon, dots, underscores and spaces all
+ * become "-", e.g.:
+ *   /Users/joe/myproject        → -Users-joe-myproject      (macOS/Linux)
+ *   C:\Users\joe\myproject      → C--Users-joe-myproject     (Windows)
+ *   /Users/joe.doe/.work/my_app → -Users-joe-doe--work-my-app
  */
 export function encodeProjectPath(p: string): string {
-  return p.replace(/[/\\:]/g, "-");
+  return p.replace(/[^a-zA-Z0-9]/g, "-");
 }

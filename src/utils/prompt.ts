@@ -57,3 +57,28 @@ export function matchChoice(raw: string, options: { label: string; aliases?: str
     .filter(({ names }) => names.some((name) => name === answer || name.startsWith(answer)));
   return hits.length === 1 ? hits[0].i : null;
 }
+
+/**
+ * Ask for a secret without echoing it (API keys). Terminal only: the caller
+ * checks isInteractive() first. Resolves "" on Ctrl+D / closed input.
+ */
+export function askSecret(question: string): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    let answered = false;
+    const out = rl as unknown as { _writeToOutput?: (s: string) => void; output: NodeJS.WriteStream };
+    process.stdout.write(question);
+    out._writeToOutput = (s: string) => {
+      // Keep line breaks, hide everything typed.
+      if (s.includes("\n") || s.includes("\r")) process.stdout.write("\n");
+    };
+    rl.on("close", () => {
+      if (!answered) resolve("");
+    });
+    rl.question("", (answer) => {
+      answered = true;
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}

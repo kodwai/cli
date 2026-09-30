@@ -22,6 +22,11 @@ describe("encodeProjectPath", () => {
     expect(encodeProjectPath("D:\\work\\kodwai\\cli")).toBe("D--work-kodwai-cli");
   });
 
+  it("encodes dots, underscores and spaces like Claude Code does", () => {
+    expect(encodeProjectPath("/Users/joe.doe/.work/my_app")).toBe("-Users-joe-doe--work-my-app");
+    expect(encodeProjectPath("/Users/x/My Projects/kodwai-rate-limiter")).toBe("-Users-x-My-Projects-kodwai-rate-limiter");
+  });
+
   it("returns an empty string unchanged", () => {
     expect(encodeProjectPath("")).toBe("");
   });

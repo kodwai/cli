@@ -5,6 +5,8 @@ import { execSync } from "node:child_process";
 import type { AgentTrace, TraceTurn } from "./types.js";
 import { rateTraceQuality } from "./quality.js";
 import { pickPrimaryModel } from "./model.js";
+import { isInjectedUserText } from "./injected.js";
+import type { LinkedSession } from "./linked-sessions.js";
 
 /**
  * Collect Cursor traces for a specific workspace.
@@ -22,6 +24,7 @@ import { pickPrimaryModel } from "./model.js";
 export async function collectCursorTrace(
   startTime: Date,
   workspacePath: string,
+  linked: LinkedSession[] = [],
 ): Promise<AgentTrace | null> {
   const p = platform();
   let cursorBase: string;
@@ -45,14 +48,34 @@ export async function collectCursorTrace(
   if (composerIds.length === 0) {
     // Try parent directories too (user may have opened a parent folder)
     const parentPath = join(workspacePath, "..");
-    const parentIds = await findComposerIds(cursorBase, parentPath);
-    if (parentIds.length === 0) return null;
-    composerIds.push(...parentIds);
+    composerIds.push(...(await findComposerIds(cursorBase, parentPath)));
+  }
+  // Conversations linked by the kodwai plugin's hooks (Cursor's conversation_id).
+  for (const session of linked) {
+    if (/^[A-Za-z0-9-]+$/.test(session.session_id) && !composerIds.includes(session.session_id)) {
+      composerIds.push(session.session_id);
+    }
   }
 
   // Step 2: Extract messages from global DB
   const globalDb = join(cursorBase, "globalStorage", "state.vscdb");
-  const { turns, models } = await extractBubbles(globalDb, composerIds, startTime);
+  let { turns, models } = composerIds.length
+    ? await extractBubbles(globalDb, composerIds, startTime)
+    : { turns: [] as TraceTurn[], models: [] as string[] };
+
+  // Step 3: nothing in the database, but the plugin recorded agent transcript files.
+  if (turns.length === 0) {
+    for (const session of linked) {
+      if (!session.transcript_path) continue;
+      try {
+        const parsed = parseCursorTranscript(await readFile(session.transcript_path, "utf-8"), startTime);
+        turns = turns.concat(parsed.turns);
+        models = models.concat(parsed.models);
+      } catch {
+        // missing or unreadable transcript
+      }
+    }
+  }
 
   if (turns.length === 0) return null;
 
@@ -236,7 +259,7 @@ async function extractBubbles(
         const text = bubble.text || "";
         const codeBlocks = bubble.codeBlocks || [];
 
-        if (btype === 1 && text.trim()) {
+        if (btype === 1 && text.trim() && !isInjectedUserText(text)) {
           turns.push({
             role: "user",
             content: text.slice(0, 2000),
@@ -279,5 +302,62 @@ async function extractBubbles(
     }
   }
 
+  return { turns, models };
+}
+
+/**
+ * Turns from a Cursor agent transcript (~/.cursor/projects/<ws>/agent-transcripts/*.jsonl),
+ * used when the plugin linked a conversation the state database doesn't show.
+ * The format isn't documented: lines look like `{ role, message: { content } }`
+ * (Anthropic-style blocks) and carry no tool outputs, so this reads defensively.
+ * Lines with a timestamp before the start are dropped.
+ */
+export function parseCursorTranscript(content: string, startTime: Date): { turns: TraceTurn[]; models: string[] } {
+  const turns: TraceTurn[] = [];
+  const models: string[] = [];
+  for (const raw of content.split("\n")) {
+    if (!raw.trim()) continue;
+    let rec: any;
+    try {
+      rec = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    const role = rec?.role ?? rec?.message?.role ?? rec?.type;
+    if (role !== "user" && role !== "assistant") continue;
+    const timestamp = rec.timestamp ?? rec.createdAt ?? rec.message?.timestamp;
+    if (timestamp) {
+      const ts = new Date(timestamp);
+      if (!Number.isNaN(ts.getTime()) && ts < startTime) continue;
+    }
+    const model = rec.model ?? rec.message?.model;
+    if (typeof model === "string") models.push(model);
+
+    const body = rec.message?.content ?? rec.content ?? rec.text ?? "";
+    const blocks: any[] = Array.isArray(body) ? body : [{ type: "text", text: String(body) }];
+    const text = blocks
+      .filter((b) => b && (b.type === "text" || typeof b === "string"))
+      .map((b) => (typeof b === "string" ? b : b.text || ""))
+      .join("\n")
+      .trim();
+    const toolCalls = blocks
+      .filter((b) => b && b.type === "tool_use")
+      .map((b) => ({
+        name: b.name || "tool",
+        input: (typeof b.input === "string" ? b.input : JSON.stringify(b.input ?? "")).slice(0, 500),
+        output: "",
+      }));
+
+    if (role === "user") {
+      if (text && !isInjectedUserText(text)) turns.push({ role, content: text.slice(0, 2000), ...(timestamp ? { timestamp } : {}) });
+    } else if (text || toolCalls.length) {
+      turns.push({
+        role,
+        content: (text || "[tool use]").slice(0, 2000),
+        ...(timestamp ? { timestamp } : {}),
+        ...(toolCalls.length ? { tool_calls: toolCalls } : {}),
+      });
+    }
+  }
   return { turns, models };
 }

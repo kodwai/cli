@@ -4,6 +4,7 @@ import { apiRequest, resolveApiUrl } from "../utils/api.js";
 import { collectWorkspaceFiles, countSourceFiles, summarizeFiles } from "../utils/collect.js";
 import { elapsed, findSubmissionMeta } from "../utils/challenge-meta.js";
 import { printScorecard, type SubmissionView } from "../utils/results.js";
+import { readLinkedSessions } from "../traces/linked-sessions.js";
 
 /**
  * Where am I? Inside a workspace: time used/left, files so far, or the score if
@@ -19,7 +20,8 @@ export async function status(apiUrl?: string): Promise<void> {
     const resultsUrl = `${resolveWebUrl(baseUrl)}/dev/submissions/${meta.submission_id}`;
     display.info(`  Challenge:  ${meta.challenge_title || meta.challenge_slug}`);
     display.info(`  Workspace:  ${workspacePath}`);
-    display.info(`  Agent:      ${meta.agent_choice}`);
+    const linked = await readLinkedSessions(workspacePath, meta.agent_choice);
+    display.info(`  Agent:      ${meta.agent_choice}${linked.length ? ` (session linked)` : ""}`);
 
     if (meta.submitted_at) {
       display.info(`  Submitted:  ${new Date(meta.submitted_at).toLocaleString()}`);

@@ -62,6 +62,17 @@ Only one challenge can be in progress at a time. To drop one without scoring it:
 kodwai abandon
 ```
 
+### From inside your agent
+
+The [kodwai plugin](https://github.com/kodwai/plugin) for Claude Code, Codex and Cursor adds `/kodwai:challenge`, `/kodwai:status`, `/kodwai:submit` and `/kodwai:abandon`, and links your agent session to the challenge so `submit` reads its exact transcript.
+
+```
+/plugin marketplace add kodwai/plugin      # Claude Code
+/plugin install kodwai@kodwai
+```
+
+Without the plugin, running `kodwai challenge` from inside Claude Code or Codex still links that session: the CLI reads the session id the agent gives its shell commands. When no terminal is attached, the agent is detected automatically, and `--accept-data-notice` accepts the data collection notice after you've agreed to it in the chat.
+
 ### How scoring works
 
 Each submission gets a score from 0 to 100 across three axes:
@@ -93,19 +104,68 @@ When time runs out or you type `/exit` in Claude Code, your session is auto-uplo
 ### Commands
 
 ```
-kodwai login                     Sign in via your browser
-kodwai logout                    Sign out of this device
-kodwai whoami                    Show the signed-in account
-kodwai challenge <id-or-slug>    Start a developer coding challenge
-kodwai submit                    Submit your challenge solution
-kodwai start <session-id>        Join an interview session
+Discover
+  kodwai challenges                Browse challenges (your best score on the ones you solved)
+    --search <text> --difficulty easy|medium|hard --category <name>
+    --sort newest|popular|difficulty --limit <n> --page <n>
+  kodwai challenges categories     Categories and how many challenges each has
+  kodwai info <slug>               Spec, how it's scored, your runs, top 10 (--verbose: signals)
+  kodwai daily                     Challenge of the Day
+  kodwai sprint                    This week's sprint and standings
+  kodwai events [slug]             Events, or one event's board
+
+Standings
+  kodwai leaderboard               All-time board with your rank
+    --agent claude-code|cursor|codex --model <slug> --category <name> --page <n>
+  kodwai leaderboard <slug>        One challenge's board
+  kodwai leaderboard me            Your best score on each ranked challenge
+  kodwai leaderboard filters       Values for --model and --category
+  kodwai league                    Your weekly league: division, rank, zones
+
+You
+  kodwai profile [username]        Tier, Elo, level, rank, streak, mastery, badges, runs
+  kodwai profile edit              --bio --github --x --linkedin --website
+  kodwai badges [--all]            Badges held, progress and rarity
+  kodwai quests                    Daily and weekly quests
+  kodwai quests claim [key|all]    Bank finished quests' XP
+  kodwai wrapped                   Your kodwai Wrapped
+  kodwai card [--theme <t>]        README rank card (dark, light, signal)
+
+Challenges and runs
+  kodwai challenge <slug>          Start a challenge (creates a kodwai-<slug> folder)
+  kodwai status                    Time left and files so far, or your score
+  kodwai submit                    Submit your challenge solution
+  kodwai abandon                   Drop the challenge in progress without scoring it
+  kodwai submissions               Your runs (--challenge <slug> --limit <n> --page <n>)
+  kodwai result [id]               One run in full: score, axes, moments (--verbose: evidence)
+  kodwai share [id]                Public share link for a scored run
+  kodwai rate [id] --overall 1-5   Rate the challenge (--difficulty --clarity --comment)
+  kodwai delete <id>               Delete a run, or stop one in progress
+
+Account
+  kodwai login | logout | whoami   Sign in via your browser, sign out, show the account
+  kodwai username [name]           Show or set your username
+  kodwai key                       Your scoring key and free runs
+  kodwai key add                   Connect your Anthropic key (hidden prompt, never an argument)
+  kodwai key remove <id>           Remove a key
+  kodwai feedback "<text>"         Send feedback (--category bug|feature|improvement|general --rating 1-5)
+  kodwai feedback list             Your feedback and the replies
+  kodwai open [page|slug]          Open a kodwai page in the browser
+
+Interviews
+  kodwai start <session-id>        Join an interview session
 
 Options:
+  --json                         Raw JSON output (platform commands), for scripts and agents
   --local                        Use local dev (API localhost:8000, web localhost:3000)
   --api-url <url>                Override API URL
   --web-url <url>                Override web app URL (browser sign in)
   --token <token>                Session token (interview mode)
+  --agent <name>                 claude-code, cursor or codex (challenge)
+  --accept-data-notice           Accept the data collection notice without a prompt (challenge)
 ```
+
+Public commands (`challenges`, `info`, `leaderboard`, `events`, `profile <username>`) work signed out. The rest sign you in through the browser the first time.
 
 ### Local development
 
@@ -132,8 +192,10 @@ export KODWAI_API_URL=http://localhost:8000
 kodwai only collects data from your challenge workspace:
 - Code files from the challenge directory
 - Git history from the challenge session
-- AI agent traces scoped to the challenge time window
+- AI agent traces scoped to the challenge time window, from sessions run in the workspace or linked to it
 - No data from other projects or sessions
+
+Text your agent injects on its own (environment details, instruction files, skill bodies) is dropped from the trace: only what you and the agent said is sent.
 
 The CLI source is publicly available. [View the source](https://github.com/kodwai/cli).
 
