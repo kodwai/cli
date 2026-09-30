@@ -1,6 +1,6 @@
 {
   "name": "@kodwai/cli",
-  "version": "1.9.2",
+  "version": "1.10.0",
   "description": "Real coding challenges you solve with your own AI agent. kodwai scores how well you direct it: Direction, Outcome, Lift.",
   "homepage": "https://www.kodwai.com",
   "repository": {

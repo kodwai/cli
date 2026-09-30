@@ -1,9 +1,11 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { AgentTrace, TraceTurn } from "./types.js";
 import { rateTraceQuality } from "./quality.js";
 import { pickPrimaryModel } from "./model.js";
+import { isInjectedUserText } from "./injected.js";
+import type { LinkedSession } from "./linked-sessions.js";
 
 export interface ParsedRollout {
   cwd: string | null;
@@ -90,6 +92,8 @@ export function parseCodexRollout(content: string): ParsedRollout {
       const role = payload.role;
       if (role !== "user" && role !== "assistant") continue; // skip developer/system
       const text = extractText(payload.content);
+      // Codex logs injected context (environment, AGENTS.md, skill bodies) as user messages.
+      if (role === "user" && isInjectedUserText(text)) continue;
       if (text) turns.push({ role, content: text.slice(0, 2000), timestamp: rec.timestamp });
     } else if (payload.type === "function_call") {
       const args =
@@ -142,19 +146,39 @@ export function codexCwdMatches(cwd: string | null, workspacePath: string): bool
  *
  * Codex stores sessions globally, so we scope to the challenge by matching each
  * session's `cwd` (session_meta) to the workspace and filtering turns to the
- * challenge time window.
+ * challenge time window. A session linked to the workspace (plugin hook or
+ * CODEX_THREAD_ID) is taken by its rollout file, whatever its cwd.
  */
 export async function collectCodexTraceFrom(
   sessionsRoot: string,
   startTime: Date,
   workspacePath: string,
+  linked: LinkedSession[] = [],
 ): Promise<AgentTrace | null> {
-  let files: string[];
+  let discovered: string[] = [];
   try {
-    files = await listRolloutFiles(sessionsRoot, startTime);
+    discovered = await listRolloutFiles(sessionsRoot, startTime);
   } catch {
-    return null; // sessions root missing / unreadable
+    // sessions root missing / unreadable; linked rollouts may live elsewhere
   }
+
+  // Linked rollouts: the recorded transcript path, else rollout-*-<session id>.jsonl.
+  const linkedFiles = new Set<string>();
+  for (const session of linked) {
+    if (session.transcript_path && (await isFile(session.transcript_path))) {
+      linkedFiles.add(session.transcript_path);
+      continue;
+    }
+    const match = discovered.find((f) => f.endsWith(`-${session.session_id}.jsonl`));
+    if (match) linkedFiles.add(match);
+  }
+  // One entry per real file: a hook may report a path through a symlink (/tmp vs /private/tmp).
+  const byRealPath = new Map<string, string>();
+  for (const file of [...linkedFiles, ...discovered]) {
+    const real = await realpath(file).catch(() => file);
+    if (!byRealPath.has(real)) byRealPath.set(real, file);
+  }
+  const files = [...byRealPath.values()].sort();
   if (files.length === 0) return null;
 
   const turns: TraceTurn[] = [];
@@ -171,7 +195,7 @@ export async function collectCodexTraceFrom(
     }
     const parsed = parseCodexRollout(content);
     if (isImportedRollout(parsed)) continue; // foreign-agent session imported by the desktop app
-    if (!codexCwdMatches(parsed.cwd, workspacePath)) continue;
+    if (!linkedFiles.has(file) && !codexCwdMatches(parsed.cwd, workspacePath)) continue;
 
     for (const turn of parsed.turns) {
       if (turn.timestamp) {
@@ -225,11 +249,20 @@ async function listRolloutFiles(sessionsRoot: string, startTime: Date): Promise<
   return out.sort();
 }
 
-/** Collect a Codex trace for a workspace from the user's ~/.codex/sessions. */
+async function isFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** Collect a Codex trace for a workspace from the user's sessions ($CODEX_HOME/sessions, default ~/.codex). */
 export async function collectCodexTrace(
   startTime: Date,
   workspacePath: string,
+  linked: LinkedSession[] = [],
 ): Promise<AgentTrace | null> {
-  const sessionsRoot = join(homedir(), ".codex", "sessions");
-  return collectCodexTraceFrom(sessionsRoot, startTime, workspacePath);
+  const codexHome = process.env.CODEX_HOME || join(homedir(), ".codex");
+  return collectCodexTraceFrom(join(codexHome, "sessions"), startTime, workspacePath, linked);
 }

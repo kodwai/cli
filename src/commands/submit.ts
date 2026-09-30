@@ -7,6 +7,7 @@ import { display } from "../utils/display.js";
 import { ensureAuth, getCurrentUser, resolveWebUrl } from "../utils/auth.js";
 import { ensureCanSubmit } from "../utils/entitlement.js";
 import { detectAndCollectTrace } from "../traces/detector.js";
+import { linkEnvSession } from "../traces/linked-sessions.js";
 import { ApiError, apiRequest } from "../utils/api.js";
 import { collectGitData } from "../utils/git.js";
 import { collectWorkspaceFiles, countSourceFiles, summarizeFiles } from "../utils/collect.js";
@@ -91,14 +92,18 @@ export async function submitChallenge(opts: SubmitOptions = {}): Promise<void> {
 
   // 6. Agent traces
   display.info(`Collecting ${meta.agent_choice} traces...`);
+  // Submitting from inside the agent: make sure this session is linked too.
+  await linkEnvSession(workspacePath, meta.agent_choice, "submit");
   const startTime = new Date(meta.started_at);
   const detection = await detectAndCollectTrace(meta.agent_choice, startTime, workspacePath);
   if (detection.trace) {
     const modelSuffix = detection.trace.model_raw ? ` · ${detection.trace.model_raw}` : "";
-    display.success(`Agent: ${detection.agent}${modelSuffix} (${detection.trace.trace_quality} quality, ${detection.trace.turns.length} turns)`);
+    const linkedNote = detection.linked_sessions ? `, ${detection.linked_sessions} linked session${detection.linked_sessions === 1 ? "" : "s"}` : "";
+    display.success(`Agent: ${detection.agent}${modelSuffix} (${detection.trace.trace_quality} quality, ${detection.trace.turns.length} turns${linkedNote})`);
   } else {
     display.warning(`No ${meta.agent_choice} traces found for this folder since the challenge started.`);
     display.info("  Direction is read from the trace, so it will score low. Did you run the agent inside this folder?");
+    display.info("  The kodwai plugin links your session automatically: github.com/kodwai/plugin");
   }
 
   const body = {

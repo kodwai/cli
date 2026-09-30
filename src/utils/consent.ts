@@ -34,7 +34,12 @@ async function saveConsent(): Promise<void> {
   await writeFile(CONSENT_FILE, JSON.stringify(record, null, 2), "utf-8");
 }
 
-export async function ensureConsent(): Promise<void> {
+/**
+ * Show the data collection notice once. `accept` records consent without a
+ * prompt, for agents running the CLI on the user's behalf after the user
+ * agreed to the same notice in the chat (the kodwai plugin asks first).
+ */
+export async function ensureConsent(accept = false): Promise<void> {
   if (await hasConsented()) return;
 
   console.log("");
@@ -64,8 +69,16 @@ export async function ensureConsent(): Promise<void> {
   display.divider();
   console.log("");
 
+  if (accept) {
+    await saveConsent();
+    display.info("Notice accepted (--accept-data-notice).");
+    console.log("");
+    return;
+  }
   if (!isInteractive()) {
-    throw new Error("Run this once in a terminal to accept the data collection notice above.");
+    throw new Error(
+      "Accept the data collection notice above first: run this once in a terminal, or add --accept-data-notice.",
+    );
   }
   const answer = await confirm("  I understand, continue (y/n): ");
   if (!answer) {

@@ -7,6 +7,11 @@ import { logout } from "../commands/logout.js";
 import { whoami } from "../commands/whoami.js";
 import { status } from "../commands/status.js";
 import { abandon } from "../commands/abandon.js";
+import { listChallenges, listCategories, challengeInfo, daily, sprint, events } from "../commands/browse.js";
+import { leaderboard, league } from "../commands/standings.js";
+import { profile, editProfile, badges, quests, claimQuest, wrapped, card } from "../commands/me.js";
+import { submissions, result, share, rate, deleteRun } from "../commands/runs.js";
+import { setUsername, keyStatus, keyAdd, keyRemove, sendFeedback, listFeedback, openPage } from "../commands/account.js";
 import { offerUpdate, runUpdateCheck } from "../utils/update-notifier.js";
 import { ApiError } from "../utils/api.js";
 
@@ -24,7 +29,13 @@ function normalizeLeadingDashes(arg: string): string {
 
 const args = process.argv.slice(2).map(normalizeLeadingDashes);
 // Flags that take a value; everything else starting with "-" is a boolean.
-const VALUE_FLAGS = new Set(["--api-url", "--web-url", "--token", "--agent"]);
+const VALUE_FLAGS = new Set([
+  "--api-url", "--web-url", "--token", "--agent",
+  // platform commands
+  "--search", "--difficulty", "--category", "--sort", "--limit", "--page", "--model", "--theme",
+  "--challenge", "--overall", "--clarity", "--comment", "--rating", "--label",
+  "--bio", "--github", "--x", "--linkedin", "--website",
+]);
 
 function getFlag(name: string): string | undefined {
   const eq = args.find((a) => a.startsWith(`${name}=`));
@@ -80,9 +91,44 @@ function printHelp() {
   console.log(`
   kodwai ${VERSION}: AI-agent coding challenges & interview sessions
 
+  Discover:
+    kodwai challenges                Browse challenges (your best score on the ones you solved)
+      --search <text> --difficulty easy|medium|hard --category <name>
+      --sort newest|popular|difficulty --limit <n> --page <n>
+    kodwai challenges categories     Categories and how many challenges each has
+    kodwai info <slug>               Spec, how it's scored, your runs, top 10 (--verbose: signals)
+    kodwai daily                     Challenge of the Day
+    kodwai sprint                    This week's sprint and standings
+    kodwai events [slug]             Events, or one event's board
+
+  Standings:
+    kodwai leaderboard               All-time board with your rank
+      --agent claude-code|cursor|codex --model <slug> --category <name> --page <n>
+    kodwai leaderboard <slug>        One challenge's board
+    kodwai leaderboard me            Your best score on each ranked challenge
+    kodwai leaderboard filters       Values for --model and --category
+    kodwai league                    Your weekly league: division, rank, zones
+
+  You:
+    kodwai profile [username]        Tier, Elo, level, rank, streak, mastery, badges, runs
+    kodwai profile edit              --bio --github --x --linkedin --website
+    kodwai badges [--all]            Badges held, progress and rarity
+    kodwai quests                    Daily and weekly quests
+    kodwai quests claim [key|all]    Bank finished quests' XP
+    kodwai wrapped                   Your kodwai Wrapped
+    kodwai card [--theme <t>]        README rank card (dark, light, signal)
+
+  Runs:
+    kodwai submissions               Your runs (--challenge <slug> --limit <n> --page <n>)
+    kodwai result [id]               One run in full: score, axes, moments (--verbose: evidence)
+    kodwai share [id]                Public share link for a scored run
+    kodwai rate [id] --overall 1-5   Rate the challenge (--difficulty --clarity --comment)
+    kodwai delete <id>               Delete a run, or stop one in progress
+
   Challenges:
     kodwai challenge <slug>          Start a challenge (creates a kodwai-<slug> folder)
       --agent <name>                 Skip the prompt: claude-code, cursor or codex
+      --accept-data-notice           Accept the data collection notice without a prompt
     kodwai status                    Time left and files so far (or your score, once submitted)
     kodwai submit                    Submit the challenge in this folder and show your score
       --yes, -y                      Don't ask for confirmation
@@ -93,6 +139,13 @@ function printHelp() {
     kodwai login                     Sign in via your browser
     kodwai logout                    Sign out of this device
     kodwai whoami                    Show the signed-in account
+    kodwai username [name]           Show or set your username
+    kodwai key                       Your scoring key and free runs
+    kodwai key add                   Connect your Anthropic key (hidden prompt)
+    kodwai key remove <id>           Remove a key
+    kodwai feedback "<text>"         Send feedback (--category bug|feature|improvement|general --rating 1-5)
+    kodwai feedback list             Your feedback and the replies
+    kodwai open [page|slug]          Open a kodwai page in the browser
 
   Interviews:
     kodwai start <session-id> --token <token>
@@ -102,6 +155,7 @@ function printHelp() {
     --local                          Use local dev (API localhost:8000, web localhost:3000)
     --api-url <url>                  Override API URL (or set KODWAI_API_URL)
     --web-url <url>                  Override web app URL (browser sign in)
+    --json                           Print raw JSON (platform commands)
     --version, -v                    Print the version
   `);
 }
@@ -117,7 +171,11 @@ function editDistance(a: string, b: string): number {
   return d[a.length][b.length];
 }
 
-const COMMANDS = ["challenge", "submit", "status", "abandon", "login", "logout", "whoami", "start", "help"];
+const COMMANDS = [
+  "challenge", "submit", "status", "abandon", "login", "logout", "whoami", "start", "help",
+  "challenges", "info", "daily", "sprint", "events", "leaderboard", "league", "profile", "badges", "quests",
+  "wrapped", "card", "submissions", "result", "share", "rate", "delete", "username", "key", "feedback", "open",
+];
 
 async function main() {
   // Hidden entrypoint: the background update check (spawned detached). Must run
@@ -132,7 +190,8 @@ async function main() {
     return;
   }
 
-  const [command, operand] = positionals();
+  const [command, operand, operand2] = positionals();
+  const common = { apiUrl: apiUrlFlag(), json: hasFlag("--json") };
 
   if (!command || command === "help" || hasFlag("--help", "-h")) {
     printHelp();
@@ -159,10 +218,99 @@ async function main() {
       return submitChallenge({ yes: hasFlag("--yes", "-y"), noWait: hasFlag("--no-wait") });
     case "challenge":
       if (!operand) throw new Error("Which challenge? Usage: kodwai challenge <slug>  (browse them at https://app.kodwai.com/dev/challenges)");
-      return startChallenge(operand, apiUrlFlag(), getFlag("--agent"));
+      return startChallenge(operand, apiUrlFlag(), getFlag("--agent"), { acceptNotice: hasFlag("--accept-data-notice") });
     case "start":
       if (!operand) throw new Error("Usage: kodwai start <session-id> --token <token>  (both are in your invite email)");
       return startSession(operand, apiUrlFlag(), getFlag("--token"));
+
+    // Discover
+    case "challenges":
+      if (operand === "categories") return listCategories(common);
+      return listChallenges({
+        ...common,
+        search: getFlag("--search") ?? operand,
+        difficulty: getFlag("--difficulty"),
+        category: getFlag("--category"),
+        sort: getFlag("--sort"),
+        limit: getFlag("--limit"),
+        page: getFlag("--page"),
+      });
+    case "info":
+      if (!operand) throw new Error("Which challenge? kodwai info <slug>   (list: kodwai challenges)");
+      return challengeInfo(operand, { ...common, verbose: hasFlag("--verbose") });
+    case "daily":
+      return daily(common);
+    case "sprint":
+      return sprint(common);
+    case "events":
+    case "event":
+      return events(operand, common);
+
+    // Standings
+    case "leaderboard":
+    case "lb":
+      return leaderboard(operand, {
+        ...common,
+        agent: getFlag("--agent"),
+        model: getFlag("--model"),
+        category: getFlag("--category"),
+        limit: getFlag("--limit"),
+        page: getFlag("--page"),
+      });
+    case "league":
+      return league(common);
+
+    // You
+    case "profile":
+      if (operand === "edit") {
+        return editProfile(
+          { bio: getFlag("--bio"), github: getFlag("--github"), x: getFlag("--x"), linkedin: getFlag("--linkedin"), website: getFlag("--website") },
+          common,
+        );
+      }
+      return profile(operand, common);
+    case "badges":
+      return badges({ ...common, all: hasFlag("--all") });
+    case "quests":
+      if (operand === "claim") return claimQuest(operand2, common);
+      return quests(common);
+    case "wrapped":
+      return wrapped(common);
+    case "card":
+      return card({ ...common, theme: getFlag("--theme") });
+
+    // Runs
+    case "submissions":
+    case "runs":
+      return submissions({ ...common, challenge: getFlag("--challenge"), limit: getFlag("--limit"), page: getFlag("--page") });
+    case "result":
+      return result(operand, { ...common, verbose: hasFlag("--verbose") });
+    case "share":
+      return share(operand, common);
+    case "rate":
+      return rate(operand, {
+        ...common,
+        overall: getFlag("--overall"),
+        difficulty: getFlag("--difficulty"),
+        clarity: getFlag("--clarity"),
+        comment: getFlag("--comment"),
+      });
+    case "delete":
+      return deleteRun(operand, { ...common, yes: hasFlag("--yes", "-y") });
+
+    // Account
+    case "username":
+      return setUsername(operand, common);
+    case "key":
+    case "keys":
+      if (operand === "add") return keyAdd({ ...common, label: getFlag("--label") });
+      if (operand === "remove" || operand === "rm") return keyRemove(operand2, { ...common, yes: hasFlag("--yes", "-y") });
+      return keyStatus(common);
+    case "feedback":
+      if (operand === "list") return listFeedback(common);
+      return sendFeedback(operand, { ...common, category: getFlag("--category"), rating: getFlag("--rating") });
+    case "open":
+      return openPage(operand, common);
     default: {
       const guess = COMMANDS.find((c) => editDistance(c, command.toLowerCase()) <= 2);
       throw new Error(`Unknown command "${command}".${guess ? ` Did you mean \`kodwai ${guess}\`?` : ""} Run \`kodwai help\` for the list.`);
